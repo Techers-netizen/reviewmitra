@@ -1,0 +1,102 @@
+// ReviewMitra - Local Business Review Aggregator & AI Auto-Reply SaaS
+// Adapted for SQLite (sandbox). Production targets PostgreSQL w/ RLS.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  fullName     String
+  phoneNumber  String   @unique
+  email        String?  @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  businesses   Business[]
+}
+
+model Business {
+  id              String   @id @default(cuid())
+  ownerId         String
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  businessName    String
+  category        String?  // 'clinic', 'salon', 'gym', 'restaurant'
+  phoneSupport    String?  // injected into negative replies
+  defaultTone     String   @default("friendly")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  connections     PlatformConnection[]
+  reviews         Review[]
+  subscriptions   Subscription[]
+}
+
+model PlatformConnection {
+  id                    String   @id @default(cuid())
+  businessId           String
+  business             Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  platformName         String   // 'google', 'facebook', 'justdial'
+  externalAccountId    String?
+  // AES-256-GCM encrypted fields (stored as base64/hex strings in SQLite)
+  encryptedAccessToken String?
+  encryptedRefreshToken String?
+  tokenIv              String?
+  tokenAuthTag         String?
+  status               String   @default("connected") // 'connected', 'expired', 'error'
+  lastSyncAt           DateTime?
+  createdAt            DateTime @default(now())
+
+  @@unique([businessId, platformName])
+}
+
+model Review {
+  id                String   @id @default(cuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  platformName      String   // 'google', 'facebook', 'justdial'
+  externalReviewId  String
+  reviewerName      String
+  reviewerAvatarUrl  String?
+  rating            Int      // 1-5
+  reviewText        String?
+  sentiment         String   @default("neutral") // 'positive', 'neutral', 'negative'
+  reviewTimestamp   DateTime
+  isReplied         Boolean  @default(false)
+  rawPayload        String?  // JSONB stored as string in SQLite
+  createdAt         DateTime @default(now())
+  replies           ReviewReply[]
+
+  @@unique([platformName, externalReviewId])
+  @@index([businessId, reviewTimestamp])
+}
+
+model ReviewReply {
+  id              String   @id @default(cuid())
+  reviewId        String
+  review          Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  businessId      String
+  replyText       String
+  generatedByAi   Boolean  @default(true)
+  aiToneUsed      String?
+  postStatus      String   @default("posted") // 'posted', 'copied_to_clipboard', 'failed'
+  createdAt       DateTime @default(now())
+}
+
+model Subscription {
+  id                     String   @id @default(cuid())
+  businessId             String
+  business               Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  planName               String   // 'starter_499', 'growth_899'
+  razorpaySubscriptionId String? @unique
+  status                 String   @default("active") // 'active', 'past_due', 'cancelled'
+  currentPeriodEnd       DateTime?
+  monthlyAiReplyLimit    Int      @default(100)
+  aiRepliesUsed          Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
