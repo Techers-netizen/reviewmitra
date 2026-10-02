@@ -28,12 +28,17 @@ model Business {
   businessName    String
   category        String?  // 'clinic', 'salon', 'gym', 'restaurant'
   phoneSupport    String?  // injected into negative replies
-  defaultTone     String   @default("friendly")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  connections     PlatformConnection[]
-  reviews         Review[]
-  subscriptions   Subscription[]
+  defaultTone          String   @default("friendly")
+  autoReplyPositive    Boolean  @default(false)
+  autoReplyNeutral     Boolean  @default(false)
+  autoReplyDelay       Int      @default(5)    // minutes before auto-posting
+  notifyWhatsapp       Boolean  @default(true)
+  notifyWhatsappNumber String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  connections          PlatformConnection[]
+  reviews              Review[]
+  subscriptions        Subscription[]
 }
 
 model PlatformConnection {
@@ -84,6 +89,8 @@ model ReviewReply {
   generatedByAi   Boolean  @default(true)
   aiToneUsed      String?
   postStatus      String   @default("posted") // 'posted', 'copied_to_clipboard', 'failed'
+  isAutoReply     Boolean  @default(false)
+  isDraft         Boolean  @default(false)    // true = generated draft, awaiting approval
   createdAt       DateTime @default(now())
 }
 

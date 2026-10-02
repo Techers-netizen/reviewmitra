@@ -1,16 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -27,19 +23,30 @@ export const metadata: Metadata = {
     "MSME",
     "Indian business",
     "SaaS",
+    "review management",
   ],
   authors: [{ name: "ReviewMitra" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ReviewMitra",
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#0f172a",
+  maximumScale: 5,
+  themeColor: "#059669",
 };
+
+import { SessionProvider } from "@/components/providers/session-provider";
+import { PwaRegistrar } from "@/components/pwa-registrar";
 
 export default function RootLayout({
   children,
@@ -49,10 +56,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster />
+        <SessionProvider>
+          <PwaRegistrar />
+          {children}
+          <Toaster />
+        </SessionProvider>
       </body>
     </html>
   );

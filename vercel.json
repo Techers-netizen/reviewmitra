@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-reviews",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-reviews",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

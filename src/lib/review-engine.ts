@@ -89,3 +89,69 @@ Output ONLY the reply text, ready to post.`;
 
   return { systemPrompt, userPrompt };
 }
+
+/**
+ * High-level AI reply generator function.
+ * Called by review sync engine and API routes.
+ */
+export async function generateAiReply(
+  opts: {
+    reviewerName: string;
+    rating: number;
+    reviewText: string;
+    businessName: string;
+    category?: string | null;
+    phoneSupport?: string | null;
+  },
+  tone: Tone = "friendly"
+): Promise<string> {
+  const { systemPrompt, userPrompt } = buildReplyPrompt({
+    businessName: opts.businessName,
+    businessCategory: opts.category,
+    phoneSupport: opts.phoneSupport,
+    reviewerName: opts.reviewerName,
+    rating: opts.rating,
+    reviewText: opts.reviewText,
+    tone,
+  });
+
+  return generateWithProvider(systemPrompt, userPrompt);
+}
+
+async function generateWithProvider(systemPrompt: string, userPrompt: string): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      }
+    } catch (e) {
+      console.warn("Gemini call failed, falling back to mock");
+    }
+  }
+
+  // Fallback mock generation for dev/demo
+  const ratingMatch = userPrompt.match(/Rating:\s*(\d)\s*\/\s*5/);
+  const rating = ratingMatch ? parseInt(ratingMatch[1]) : 4;
+  const nameMatch = userPrompt.match(/Reviewer:\s*(.+)/);
+  const reviewerName = nameMatch ? nameMatch[1].trim() : "Customer";
+
+  if (rating >= 4) {
+    return `Bahut dhanyawaad ${reviewerName} ji! Aapke feedback se puri team ko bahut khushi hui. Agli baar zaroor visit karein 🙏`;
+  }
+  if (rating <= 2) {
+    return `${reviewerName} ji, hume khed hai ki aapka anubhav accha nahi raha. Hum is par turant action le rahe hain. Kripya hume helpline par contact karein taaki hum matter resolve kar sakein 🙏`;
+  }
+  return `Dhanyawaad ${reviewerName} ji aapke honest review ke liye! Hum services ko aur behtar banane ke liye committed hain 🙏`;
+}
