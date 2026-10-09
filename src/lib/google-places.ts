@@ -12,8 +12,26 @@ interface PlaceSyncResult {
 /**
  * Extracts Place ID or query from a Google Maps URL or search string
  */
-export function extractPlaceQuery(input: string): { placeId?: string; query?: string } {
-  const trimmed = input.trim();
+export async function extractPlaceQuery(input: string): Promise<{ placeId?: string; query?: string }> {
+  let trimmed = input.trim();
+
+  // If it's a short link like maps.app.goo.gl, follow redirect
+  if (trimmed.includes("goo.gl/") || trimmed.includes("maps.app.goo.gl")) {
+    try {
+      const resp = await fetch(trimmed, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        redirect: "follow",
+      });
+      if (resp.url && resp.url !== trimmed) {
+        trimmed = resp.url;
+      }
+    } catch (e) {
+      console.warn("Could not unshorten maps URL, using original:", e);
+    }
+  }
 
   // If it's a direct place_id (e.g. ChIJ...)
   if (/^ChIJ[a-zA-Z0-9_-]{20,}$/.test(trimmed)) {
@@ -31,6 +49,13 @@ export function extractPlaceQuery(input: string): { placeId?: string; query?: st
   if (placeNameMatch && placeNameMatch[1]) {
     const decodedName = decodeURIComponent(placeNameMatch[1].replace(/\+/g, " "));
     return { query: decodedName };
+  }
+
+  // If URL has search query parameter q=...
+  const qMatch = trimmed.match(/[?&]q=([^&]+)/);
+  if (qMatch && qMatch[1]) {
+    const decodedQ = decodeURIComponent(qMatch[1].replace(/\+/g, " "));
+    return { query: decodedQ };
   }
 
   // If plain search query or shop name
@@ -53,7 +78,7 @@ export async function syncGooglePlacesReviews(
       return { success: false, reviewsCount: 0, error: "Business not found" };
     }
 
-    const { placeId, query } = extractPlaceQuery(input || business.businessName);
+    const { placeId, query } = await extractPlaceQuery(input || business.businessName);
     const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 
     let targetPlaceId = placeId;
