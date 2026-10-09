@@ -20,6 +20,7 @@ import {
   X,
   ShieldCheck,
   CheckCircle2,
+  QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,8 @@ const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/reviews", label: "Unified Inbox", icon: MessageSquare, badge: "3" },
   { href: "/dashboard/connect", label: "Connect Platforms", icon: Link2 },
-  { href: "/dashboard/auto-reply", label: "AI Auto-Reply", icon: Bot, isNew: true },
+  { href: "/dashboard/qr-booster", label: "QR Booster", icon: QrCode, isNew: true },
+  { href: "/dashboard/auto-reply", label: "AI Auto-Reply", icon: Bot },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },

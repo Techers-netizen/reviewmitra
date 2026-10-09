@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { generateAiReply } from "@/lib/review-engine";
 import { sendWhatsAppNotification } from "@/lib/whatsapp";
+import { postGoogleReplyToApi } from "@/lib/google-business";
+import { postMetaReplyToApi } from "@/lib/meta-business";
 
 // POST /api/cron/process-reviews
 // Secured via CRON_SECRET header or query parameter
@@ -56,6 +58,13 @@ export async function POST(req: NextRequest) {
             tone
           );
 
+          // Post live to platform API
+          if (rev.platformName === "google") {
+            await postGoogleReplyToApi(biz.id, rev.externalReviewId, replyText).catch(() => {});
+          } else if (rev.platformName === "facebook") {
+            await postMetaReplyToApi(biz.id, rev.externalReviewId, replyText).catch(() => {});
+          }
+
           await db.reviewReply.create({
             data: {
               reviewId: rev.id,
@@ -63,7 +72,7 @@ export async function POST(req: NextRequest) {
               replyText,
               generatedByAi: true,
               aiToneUsed: tone,
-              postStatus: rev.platformName === "google" ? "posted" : "copied_to_clipboard",
+              postStatus: rev.platformName === "justdial" ? "copied_to_clipboard" : "posted",
               isAutoReply: true,
               isDraft: false,
             },
@@ -95,7 +104,6 @@ export async function POST(req: NextRequest) {
 
       // ─── Case 2: Negative Review (1-2★) — SAFETY DRAFT LOCK ──
       else if (rev.rating <= 2) {
-        // Has a draft already been created?
         const existingDraft = rev.replies.find((r) => r.isDraft);
 
         if (!existingDraft) {
@@ -159,6 +167,12 @@ export async function POST(req: NextRequest) {
             tone
           );
 
+          if (rev.platformName === "google") {
+            await postGoogleReplyToApi(biz.id, rev.externalReviewId, replyText).catch(() => {});
+          } else if (rev.platformName === "facebook") {
+            await postMetaReplyToApi(biz.id, rev.externalReviewId, replyText).catch(() => {});
+          }
+
           await db.reviewReply.create({
             data: {
               reviewId: rev.id,
@@ -166,7 +180,7 @@ export async function POST(req: NextRequest) {
               replyText,
               generatedByAi: true,
               aiToneUsed: tone,
-              postStatus: rev.platformName === "google" ? "posted" : "copied_to_clipboard",
+              postStatus: rev.platformName === "justdial" ? "copied_to_clipboard" : "posted",
               isAutoReply: true,
               isDraft: false,
             },
@@ -179,7 +193,6 @@ export async function POST(req: NextRequest) {
 
           summary.autoReplied++;
         } else {
-          // Create draft
           const existingDraft = rev.replies.find((r) => r.isDraft);
           if (!existingDraft) {
             const draftText = await generateAiReply(

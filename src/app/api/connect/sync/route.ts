@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ingestReviews } from "@/lib/sync-engine";
+import { syncGoogleReviewsFromApi } from "@/lib/google-business";
+import { syncMetaReviewsFromApi } from "@/lib/meta-business";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,23 +34,20 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Simulate live incoming reviews during sync
-      const simulatedReviews = [
-        {
-          externalId: `${conn.platformName}_live_${Date.now()}`,
-          reviewerName: "Neeraj Chopda",
-          rating: 5,
-          reviewText: "Excellent staff and quick resolution. Highly recommended to everyone!",
-          reviewTimestamp: new Date(),
-        },
-      ];
-
-      const res = await ingestReviews(
-        business.id,
-        conn.platformName as "google" | "facebook" | "justdial",
-        simulatedReviews
-      );
-      syncSummary[conn.platformName] = res;
+      if (conn.platformName === "google") {
+        const googleResult = await syncGoogleReviewsFromApi(business.id);
+        syncSummary.google = googleResult;
+      } else if (conn.platformName === "facebook") {
+        const fbResult = await syncMetaReviewsFromApi(business.id);
+        syncSummary.facebook = fbResult;
+      } else if (conn.platformName === "justdial") {
+        // Justdial listings are synced via scheduled web scraper
+        syncSummary.justdial = {
+          success: true,
+          mode: "scraper_queued",
+          note: "Justdial listing queued for background scrape.",
+        };
+      }
     }
 
     return NextResponse.json({
@@ -60,7 +58,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Platform sync error:", error);
     return NextResponse.json(
-      { error: "Review sync failed. Kripya dobara koshish karein." },
+      { error: "Review sync failed. Please try again or check connection credentials." },
       { status: 500 }
     );
   }

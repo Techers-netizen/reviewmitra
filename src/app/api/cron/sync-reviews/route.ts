@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ingestReviews } from "@/lib/sync-engine";
+import { syncGoogleReviewsFromApi } from "@/lib/google-business";
+import { syncMetaReviewsFromApi } from "@/lib/meta-business";
 
 // POST /api/cron/sync-reviews
-// Polls and triggers scheduled sync for all connected platforms
+// Scheduled background job to pull real incoming reviews from connected platforms
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
@@ -21,20 +22,34 @@ export async function POST(req: NextRequest) {
       include: { business: true },
     });
 
-    const report: Record<string, number> = {
+    const report: Record<string, any> = {
       connectionsChecked: activeConnections.length,
       syncedSuccessfully: 0,
+      details: [],
     };
 
     for (const conn of activeConnections) {
       try {
-        await db.platformConnection.update({
-          where: { id: conn.id },
-          data: { lastSyncAt: new Date() },
-        });
+        let syncRes: any = null;
+        if (conn.platformName === "google") {
+          syncRes = await syncGoogleReviewsFromApi(conn.businessId);
+        } else if (conn.platformName === "facebook") {
+          syncRes = await syncMetaReviewsFromApi(conn.businessId);
+        }
+
         report.syncedSuccessfully++;
-      } catch (e) {
-        console.error(`Failed to update sync for ${conn.platformName}:`, e);
+        report.details.push({
+          businessId: conn.businessId,
+          platform: conn.platformName,
+          result: syncRes,
+        });
+      } catch (e: any) {
+        console.error(`Failed to sync reviews for ${conn.platformName} (${conn.businessId}):`, e);
+        report.details.push({
+          businessId: conn.businessId,
+          platform: conn.platformName,
+          error: e?.message || "Unknown error",
+        });
       }
     }
 

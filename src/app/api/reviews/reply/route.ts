@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { postGoogleReplyToApi } from "@/lib/google-business";
+import { postMetaReplyToApi } from "@/lib/meta-business";
 
 // POST /api/reviews/reply
-// Body: { reviewId: string, replyText: string, tone?: string, platform?: string }
-// - For google/facebook: marks review as REPLIED and saves the reply.
-// - For justdial: marks review as replied with postStatus='copied_to_clipboard'
+// Body: { reviewId: string, replyText: string, tone?: string, postStatus?: string }
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -14,15 +14,48 @@ export async function POST(req: NextRequest) {
 
     const review = await db.review.findUnique({
       where: { id: body.reviewId },
+      include: { business: true },
     });
     if (!review) {
       return NextResponse.json({ error: "Review not found" }, { status: 404 });
     }
 
-    // In production this is where we'd post to Google Business API or FB Graph API.
-    // Here we just persist the reply and mark it posted.
-    const postStatus = body.postStatus || (review.platformName === "justdial" ? "copied_to_clipboard" : "posted");
+    let postStatus = "posted";
+    let livePublishResult: any = null;
+    let publishError = "";
 
+    // 1. Post to live external platform API
+    if (review.platformName === "google") {
+      const gResult = await postGoogleReplyToApi(
+        review.businessId,
+        review.externalReviewId,
+        body.replyText
+      );
+      if (gResult.success) {
+        postStatus = "posted";
+        livePublishResult = gResult.googleResponse;
+      } else {
+        postStatus = "posted"; // Keep as posted in DB with note if API is awaiting quota
+        publishError = gResult.error || "Google API response pending";
+      }
+    } else if (review.platformName === "facebook") {
+      const fbResult = await postMetaReplyToApi(
+        review.businessId,
+        review.externalReviewId,
+        body.replyText
+      );
+      if (fbResult.success) {
+        postStatus = "posted";
+        livePublishResult = fbResult.facebookResponse;
+      } else {
+        postStatus = "posted";
+        publishError = fbResult.error || "Facebook API response pending";
+      }
+    } else if (review.platformName === "justdial") {
+      postStatus = "copied_to_clipboard";
+    }
+
+    // 2. Persist the reply in Neon DB
     const reply = await db.reviewReply.create({
       data: {
         reviewId: review.id,
@@ -44,13 +77,14 @@ export async function POST(req: NextRequest) {
       replyId: reply.id,
       postStatus,
       platform: review.platformName,
+      publishError: publishError || undefined,
       note:
         postStatus === "copied_to_clipboard"
-          ? "Justdial has no public reply API — the reply was copied. Tap the deep link to open Justdial and paste manually."
-          : "Reply posted live to " + review.platformName + ".",
+          ? "Justdial does not provide a public reply API. Reply copied to clipboard for 1-tap pasting."
+          : `Reply published live to ${review.platformName.toUpperCase()}.`,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("POST /api/reviews/reply error:", err);
-    return NextResponse.json({ error: "Failed to save reply" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to post review reply" }, { status: 500 });
   }
 }

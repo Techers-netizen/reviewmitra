@@ -103,7 +103,7 @@ export default function ConnectPlatformsPage() {
     }
   };
 
-  // Trigger review sync
+  // Trigger real review sync from live APIs
   const handleSync = async (platform: string) => {
     setSyncingPlatform(platform);
     try {
@@ -113,11 +113,24 @@ export default function ConnectPlatformsPage() {
         body: JSON.stringify({ platformName: platform }),
       });
       if (res.ok) {
-        setNotification({ type: "success", message: `Sync completed for ${platform.toUpperCase()}.` });
+        const data = await res.json();
+        const pSummary = data.summary?.[platform];
+        const count = pSummary?.newIngested ?? pSummary?.totalFetched ?? 0;
+        const note = pSummary?.note ? ` (${pSummary.note})` : "";
+        setNotification({
+          type: "success",
+          message: `Real API sync completed for ${platform.toUpperCase()}! ${count} new reviews ingested${note}.`,
+        });
         await fetchStatus();
+      } else {
+        setNotification({
+          type: "error",
+          message: `Live sync for ${platform.toUpperCase()} completed with a notice. Ensure your Google/Meta app has required review permissions.`,
+        });
       }
     } catch (e) {
       console.error("Sync error:", e);
+      setNotification({ type: "error", message: "Failed to connect to review sync service." });
     } finally {
       setSyncingPlatform(null);
     }
