@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import {
   Bell, Search, SlidersHorizontal, RefreshCw, Filter, Inbox, TrendingUp,

@@ -26,7 +26,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { signOut, useSession } from "next-auth/react";
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: any;
+  exact?: boolean;
+  badge?: string;
+  isNew?: boolean;
+}
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/reviews", label: "Unified Inbox", icon: MessageSquare },
   { href: "/dashboard/connect", label: "Connect Platforms", icon: Link2 },
