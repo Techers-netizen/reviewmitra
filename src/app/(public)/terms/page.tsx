@@ -1,0 +1,158 @@
+import { Metadata } from "next";
+import Link from "next/link";
+import { ShieldCheck, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  title: "Terms of Service | ReviewMitra by OpenSoz",
+  description: "Terms and conditions governing the use of ReviewMitra review management and AI auto-reply services.",
+};
+
+export default function TermsPage() {
+  return (
+    <div className="min-h-screen bg-slate-50/50 py-12 sm:py-16">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6">
+        <div className="mb-8">
+          <Button variant="ghost" size="sm" asChild className="mb-4 text-xs font-semibold text-slate-500 hover:text-slate-900">
+            <Link href="/" className="flex items-center gap-1.5">
+              <ArrowLeft size={14} /> Back to Home
+            </Link>
+          </Button>
+          <div className="flex items-center gap-2 text-emerald-600 font-semibold text-xs tracking-wider uppercase mb-2">
+            <ShieldCheck size={16} /> Legal & Compliance
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            Terms of Service
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Last Updated: October 2026 · Published by OpenSoz (opensoz.com)
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-10 shadow-sm space-y-8 text-sm leading-relaxed text-slate-700">
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              1. Acceptance of Terms
+            </h2>
+            <p>
+              By accessing or using ReviewMitra (&ldquo;the Service&rdquo;), hosted at{" "}
+              <span className="font-semibold text-slate-900">reviewmitra.opensoz.com</span> and developed by{" "}
+              <span className="font-semibold text-slate-900">OpenSoz</span> (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;),
+              you agree to be legally bound by these Terms of Service. If you do not agree with any part of these terms, you must not use or access the Service.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              2. Description of Service
+            </h2>
+            <p>
+              ReviewMitra is a cloud-based software-as-a-service (SaaS) platform designed for clinics, salons, gyms, restaurants, and retail enterprises. The Service aggregates customer reviews from third-party platforms (including Google Business Profile, Facebook, and Justdial), generates AI-powered responses, and provides review generation QR code solutions.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              3. User Accounts and Security
+            </h2>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                You must provide accurate, current, and complete information during registration via Google authentication or email credentials.
+              </li>
+              <li>
+                You are solely responsible for maintaining the confidentiality of your login credentials and for all activities that occur under your account.
+              </li>
+              <li>
+                You must notify OpenSoz immediately upon discovering any unauthorized use of your account.
+              </li>
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              4. Third-Party Platform Integrations
+            </h2>
+            <p>
+              ReviewMitra interfaces with third-party application programming interfaces (APIs), including Google, Meta, and Justdial. You acknowledge that:
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                Our service is subject to the terms, quotas, and availability of these third-party platforms.
+              </li>
+              <li>
+                OAuth access tokens provided by you are stored securely with industry-standard AES-256-GCM encryption solely to read reviews and publish approved responses on your behalf.
+              </li>
+              <li>
+                OpenSoz is not liable for changes, suspensions, or restrictions imposed by third-party platforms on your external business profiles.
+              </li>
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              5. AI Content and Moderation
+            </h2>
+            <p>
+              Responses generated by ReviewMitra&apos;s AI are drafts created based on customer feedback and your configured business profile. While our models are designed to generate professional, empathetic, and culturally respectful responses across English, Hindi, Hinglish, and regional languages:
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                You retain ultimate editorial discretion and responsibility for any responses posted publicly to your brand&apos;s profiles.
+              </li>
+              <li>
+                Negative reviews (1★ and 2★) are defaulted to draft mode to ensure business owners have the opportunity to review and personalize the response before publication.
+              </li>
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              6. Subscription, Billing, and Non-Refundable Terms
+            </h2>
+            <p>
+              Subscription fees for ReviewMitra are billed in advance on a recurring monthly or annual basis via Dodo Payments.
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <span className="font-semibold text-slate-900">Free Trial:</span> New users receive a complimentary 7-day trial with full feature access and zero upfront payment obligations.
+              </li>
+              <li>
+                <span className="font-semibold text-slate-900">Non-Refundable Policy:</span> Due to the immediate provisioning of cloud compute, AI tokens, and database capacity, all subscription payments are strictly <span className="font-semibold text-red-600">non-refundable</span> once charged. Please refer to our detailed{" "}
+                <Link href="/refund-policy" className="text-emerald-600 underline font-medium">
+                  Refund & Cancellation Policy
+                </Link>{" "}
+                for full details.
+              </li>
+              <li>
+                <span className="font-semibold text-slate-900">Cancellation:</span> You may cancel your subscription at any time via your Billing settings. Cancellation halts future charges at the end of your current billing cycle.
+              </li>
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              7. Limitation of Liability
+            </h2>
+            <p>
+              In no event shall OpenSoz, its developers, or affiliates be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, customer goodwill, or data, arising out of or related to your use of ReviewMitra.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
+              8. Contact Information
+            </h2>
+            <p>
+              For any questions regarding these Terms of Service, please contact OpenSoz support:
+            </p>
+            <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/80 font-mono text-xs space-y-1">
+              <p>Email: legal@opensoz.com</p>
+              <p>Publisher: OpenSoz Technologies (https://opensoz.com)</p>
+              <p>Platform: ReviewMitra (https://reviewmitra.opensoz.com)</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}

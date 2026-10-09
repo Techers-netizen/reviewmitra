@@ -134,10 +134,13 @@ export default function PublicLayout({
             </div>
 
             <div>
-              <h4 className="font-bold text-white mb-3">Company</h4>
+              <h4 className="font-bold text-white mb-3">Company & Legal</h4>
               <ul className="space-y-2">
-                <li><Link href="/about" className="hover:text-white transition">About Us</Link></li>
-                <li><Link href="/contact" className="hover:text-white transition">Contact & Demo</Link></li>
+                <li><Link href="/about" className="hover:text-white transition">About OpenSoz</Link></li>
+                <li><Link href="/contact" className="hover:text-white transition">Contact Us</Link></li>
+                <li><Link href="/terms" className="hover:text-white transition">Terms of Service</Link></li>
+                <li><Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link></li>
+                <li><Link href="/refund-policy" className="hover:text-white transition text-amber-400">Refund Policy</Link></li>
               </ul>
             </div>
 
@@ -156,13 +159,14 @@ export default function PublicLayout({
                 </li>
                 <li><Link href="/login" className="hover:text-white transition">Log in</Link></li>
                 <li><Link href="/signup" className="hover:text-white transition">7-Day Free Trial</Link></li>
+                <li><a href="https://opensoz.com" target="_blank" rel="noreferrer" className="hover:text-white transition">opensoz.com ↗</a></li>
               </ul>
             </div>
           </div>
 
           <div className="mt-8 pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
-            <p>© {new Date().getFullYear()} ReviewMitra Technologies Pvt. Ltd. All rights reserved.</p>
-            <p>Empowering 6+ Crore Indian MSMEs with AI Automation</p>
+            <p>© {new Date().getFullYear()} ReviewMitra. An <a href="https://opensoz.com" target="_blank" rel="noreferrer" className="text-slate-400 hover:text-white underline">OpenSoz</a> Product. All rights reserved.</p>
+            <p>Smart Review Management & AI Auto-Replies for Modern Businesses</p>
           </div>
         </div>
       </footer>

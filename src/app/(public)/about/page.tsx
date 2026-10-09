@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Star, Heart, Sparkles, ArrowRight, MessageCircle, Globe, Users, Target } from "lucide-react";
+import { Heart, ArrowRight, MessageCircle, Globe, Users, Target, Code2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "About Us — ReviewMitra",
-  description: "ReviewMitra is built in India, for India. Our mission: help every local business owner manage reviews and grow their reputation effortlessly.",
+  title: "About Us — ReviewMitra by OpenSoz",
+  description: "ReviewMitra is an AI reputation management platform built by OpenSoz for independent clinics, salons, gyms, and local businesses.",
 };
 
 export default function AboutPage() {
@@ -17,43 +17,43 @@ export default function AboutPage() {
       <section className="bg-gradient-to-br from-emerald-50/80 via-white to-slate-50 border-b">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-16 sm:py-24 text-center">
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-            <Heart size={12} className="mr-1.5 fill-emerald-600" />
-            Made in Bharat 🇮🇳
+            <Code2 size={12} className="mr-1.5" />
+            Built by OpenSoz · opensoz.com
           </Badge>
           <h1 className="mt-5 text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
-            Bharat ke local businesses ko{" "}
-            <span className="text-emerald-600">digital success</span> dena
+            Empowering Local Businesses with{" "}
+            <span className="text-emerald-600">Smart AI Reputation</span>
           </h1>
           <p className="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
-            ReviewMitra ek mission ke saath bana hai: har clinic owner, salon owner, gym owner, restaurant owner ko modern review management tools dena — jo affordable ho aur samajhne me easy.
+            ReviewMitra was engineered to give clinic owners, salon founders, and neighborhood merchants enterprise-grade review automation without the enterprise price tag.
           </p>
         </div>
       </section>
 
-      {/* Mission */}
+      {/* Pillars */}
       <section className="py-16 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="grid gap-6 sm:grid-cols-3">
             {[
               {
                 icon: Target,
-                title: "Hamara Mission",
-                desc: "India me 6+ crore MSMEs hain. Inme se zyada tar ke paas na tech team hai, na marketing budget. ReviewMitra unke liye hai — simple, affordable, powerful.",
+                title: "Our Mission",
+                desc: "Millions of local business owners work tirelessly serving customers yet lack dedicated marketing teams. We build lightweight, intuitive software that handles customer feedback automatically.",
               },
               {
                 icon: Globe,
-                title: "India-First Approach",
-                desc: "Hinglish replies, ₹499 pricing, WhatsApp support, UPI payments — sab kuch Indian business owner ke workflow ke hisaab se design kiya gaya hai.",
+                title: "Multilingual Intelligence",
+                desc: "Real customers speak and review in diverse languages. Our engine understands English, Hindi, Hinglish, Gujarati, Marathi, and regional nuances to generate authentic owner responses.",
               },
               {
                 icon: Users,
-                title: "Founder-Led Support",
-                desc: "Koi ticket system nahi, koi automated chatbot nahi. Aap directly founder se WhatsApp pe baat kar sakte hain. Personally har query handle hoti hai.",
+                title: "Built by OpenSoz",
+                desc: "Developed independently under OpenSoz. No corporate bureaucracy, no forced upsells — just clean, dependable, and high-performance software built for everyday founders.",
               },
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <Card key={item.title} className="p-6">
+                <Card key={item.title} className="p-6 border-slate-200">
                   <span className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
                     <Icon size={24} />
                   </span>
@@ -66,29 +66,29 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Why we built this */}
+      {/* Founder Story */}
       <section className="py-16 border-t bg-slate-50/60">
         <div className="mx-auto max-w-3xl px-4 sm:px-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-8">
-            Kyun banaya ReviewMitra?
+            Why We Built ReviewMitra
           </h2>
-          <Card className="p-6 sm:p-8">
+          <Card className="p-6 sm:p-8 border-slate-200">
             <p className="text-sm text-slate-700 leading-relaxed">
-              &ldquo;Maine apne dentist friend ko dekha — roz subah Google aur Justdial check karte the. Ek ek review ka reply likhte the. Negative review aata tha to pura mood kharab. Unhone bola — &apos;yaar koi tool hai jo mere liye reply likh de?&apos;
+              &ldquo;I observed independent doctors and shop owners spending nearly an hour every night checking Google Maps, Facebook, and local directories — trying to craft polite replies while juggling patient appointments. A single poorly worded reply to negative feedback could ruin days of hard work.
             </p>
             <p className="mt-4 text-sm text-slate-700 leading-relaxed">
-              Maine Birdeye aur Podium dekha — $299/month! Indian MSME ke liye ye afford karna impossible hai. Tab socha — kyun na India ke liye ek affordable, Hinglish-native, simple tool banayein?
+              When I investigated existing solutions like Birdeye and Podium, they charged between $100 and $300 per month — a prohibitive cost for neighborhood businesses. I realized local owners deserved a purpose-built, affordable tool tailored to their actual daily workflow.
             </p>
             <p className="mt-4 text-sm text-slate-700 leading-relaxed">
-              ReviewMitra yehi hai — Indian business owners ke liye, Indian prices pe, Indian languages me.&rdquo;
+              That vision became ReviewMitra: modern review aggregation, culturally tuned AI replies, and in-store QR code boosters, priced fairly starting at ₹399/month.&rdquo;
             </p>
             <div className="mt-6 pt-4 border-t border-slate-200 flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm">
-                F
+                OS
               </span>
               <div>
-                <p className="font-semibold text-sm text-slate-900">Founder</p>
-                <p className="text-xs text-slate-500">ReviewMitra</p>
+                <p className="font-semibold text-sm text-slate-900">Developer & Founder</p>
+                <p className="text-xs text-slate-500">OpenSoz Technologies (<a href="https://opensoz.com" target="_blank" rel="noreferrer" className="underline hover:text-emerald-600">opensoz.com</a>)</p>
               </div>
             </div>
           </Card>
@@ -98,16 +98,20 @@ export default function AboutPage() {
       {/* CTA */}
       <section className="py-16 bg-white border-t">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 text-center">
-          <h2 className="text-2xl font-bold text-slate-900">Try karo — 7 din free.</h2>
-          <p className="mt-2 text-sm text-slate-600">Koi commitment nahi. Cancel anytime.</p>
-          <div className="mt-5 flex justify-center gap-3">
-            <Button size="lg" className="bg-emerald-600 text-white hover:bg-emerald-700 gap-2 shadow-md" asChild>
-              <Link href="/signup">Start free trial <ArrowRight size={16} /></Link>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            Ready to Put Your Reviews on Autopilot?
+          </h2>
+          <p className="mt-3 text-slate-600 max-w-md mx-auto text-sm">
+            Try ReviewMitra free for 7 days. Connect your Google and Facebook accounts in under 2 minutes.
+          </p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
+              <Link href="/signup">
+                Start 7-Day Free Trial <ArrowRight size={16} className="ml-1.5" />
+              </Link>
             </Button>
-            <Button size="lg" variant="outline" className="gap-2" asChild>
-              <a href="https://wa.me/919876543210" target="_blank" rel="noopener noreferrer">
-                <MessageCircle size={16} /> Chat with founder
-              </a>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="/contact">Contact Founder</Link>
             </Button>
           </div>
         </div>

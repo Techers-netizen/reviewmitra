@@ -6,7 +6,7 @@ import {
   Sparkles, ShieldCheck, MessageCircle, Zap, Star, Building2,
   ArrowRight, Menu, X, Bell, CheckCircle2, Clock, TrendingUp,
   Globe, Smartphone, Bot, BarChart3, Languages, Lock,
-  ChevronDown, ChevronRight, Play, Quote, Phone,
+  Play, Quote, QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 
 // ─── Fade-up animation wrapper ─────────────────────────────────────
-function FadeUp({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string; key?: React.Key }) {
+function FadeUp({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-40px" });
   return (
@@ -75,17 +75,20 @@ function Header() {
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20 group-hover:shadow-emerald-600/40 transition-shadow">
               <Star size={18} fill="white" strokeWidth={0} />
             </span>
-            <span className="text-lg font-bold tracking-tight">
-              Review<span className="text-emerald-600">Mitra</span>
-            </span>
+            <div className="flex flex-col">
+              <span className="text-lg font-bold tracking-tight text-slate-900 leading-none">
+                Review<span className="text-emerald-600">Mitra</span>
+              </span>
+              <span className="text-[9px] text-slate-400 font-medium tracking-wider uppercase mt-0.5">by OpenSoz</span>
+            </div>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
             {[
               { label: "Features", href: "#features" },
-              { label: "How it works", href: "#how-it-works" },
+              { label: "How It Works", href: "#how-it-works" },
               { label: "Pricing", href: "#pricing" },
-              { label: "Demo", href: "#demo" },
+              { label: "Live Demo", href: "#demo" },
             ].map((item) => (
               <a
                 key={item.href}
@@ -112,7 +115,7 @@ function Header() {
               asChild
             >
               <Link href="/signup">
-                Start free trial
+                Start Free Trial
                 <ArrowRight size={14} />
               </Link>
             </Button>
@@ -139,14 +142,19 @@ function Header() {
               className="md:hidden overflow-hidden border-t border-slate-200/60"
             >
               <div className="py-3 flex flex-col gap-1">
-                {["Features", "How it works", "Pricing", "Demo"].map((item) => (
+                {[
+                  { label: "Features", href: "#features" },
+                  { label: "How It Works", href: "#how-it-works" },
+                  { label: "Pricing", href: "#pricing" },
+                  { label: "Live Demo", href: "#demo" },
+                ].map((item) => (
                   <a
-                    key={item}
-                    href={`#${item.toLowerCase().replace(/ /g, "-")}`}
+                    key={item.label}
+                    href={item.href}
                     onClick={() => setOpen(false)}
                     className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   >
-                    {item}
+                    {item.label}
                   </a>
                 ))}
                 <div className="mt-2 pt-2 border-t border-slate-100 flex gap-2">
@@ -154,7 +162,7 @@ function Header() {
                     <Link href="/login">Log in</Link>
                   </Button>
                   <Button size="sm" className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700" asChild>
-                    <Link href="/signup">Start free trial</Link>
+                    <Link href="/signup">Start Free Trial</Link>
                   </Button>
                 </div>
               </div>
@@ -185,24 +193,24 @@ function Hero() {
                 className="border-emerald-200 bg-emerald-50/80 text-emerald-700 backdrop-blur-sm px-3 py-1 text-xs font-medium"
               >
                 <Sparkles size={12} className="mr-1.5" />
-                Built for Bharat&apos;s 6+ Crore MSMEs
+                Smart Reputation Management · An OpenSoz Product
               </Badge>
             </FadeUp>
 
             <FadeUp delay={0.1}>
               <h1 className="mt-5 text-3xl sm:text-5xl lg:text-[3.5rem] font-extrabold tracking-tight text-slate-900 leading-[1.1]">
-                Saare reviews ek jagah.{" "}
+                All your customer reviews.{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-500">
-                  AI 1-click me reply kare.
+                  AI auto-replies in 1-click.
                 </span>
               </h1>
             </FadeUp>
 
             <FadeUp delay={0.2}>
               <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-lg leading-relaxed">
-                Google, Facebook aur Justdial ke reviews ek mobile dashboard me.
-                AI apne aap polite professional reply likh deta hai — Hindi, English ya Hinglish me.
-                Bina kisi tech headache ke.
+                Connect Google Business, Facebook, and Justdial in a unified dashboard.
+                Our trained AI crafts personalized, polite, and culturally resonant replies across
+                English, Hindi, Hinglish, and 10+ languages.
               </p>
             </FadeUp>
 
@@ -214,7 +222,7 @@ function Hero() {
                   asChild
                 >
                   <Link href="/signup">
-                    Start free trial — 7 din free
+                    Start 7-Day Free Trial
                     <ArrowRight size={18} />
                   </Link>
                 </Button>
@@ -226,7 +234,7 @@ function Hero() {
                 >
                   <a href="#demo">
                     <Play size={16} />
-                    See live demo
+                    Try Interactive Demo
                   </a>
                 </Button>
               </div>
@@ -236,15 +244,15 @@ function Hero() {
               <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5">
                   <ShieldCheck size={14} className="text-emerald-600" />
-                  AES-256 encrypted
+                  AES-256 token encryption
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Clock size={14} className="text-emerald-600" />
-                  Setup in 2 minutes
+                  2-minute onboarding
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Star size={14} className="text-emerald-600" />
-                  No credit card needed
+                  No credit card required
                 </span>
               </div>
             </FadeUp>
@@ -263,9 +271,9 @@ function Hero() {
 // ─── HERO PHONE MOCKUP ──────────────────────────────────────────────
 function HeroPhoneMockup() {
   const mockReviews = [
-    { name: "Rohit Sharma", platform: "Google", rating: 5, text: "Doctor ne bahut achha treatment diya. Highly recommended!", time: "1m", color: "text-[#4285F4]", bg: "bg-[#4285F4]/10", label: "G", sentiment: "positive" },
-    { name: "Megha Singh", platform: "Facebook", rating: 1, text: "Booked 12pm appointment, stylist not there. Had to wait 1 hour.", time: "1h", color: "text-[#1877F2]", bg: "bg-[#1877F2]/10", label: "f", sentiment: "negative" },
-    { name: "Lakshmi Menon", platform: "Justdial", rating: 4, text: "Good doctors, friendly staff. Digital X-ray facility is a plus.", time: "3d", color: "text-[#F04E23]", bg: "bg-[#F04E23]/10", label: "Jd", sentiment: "positive" },
+    { name: "Rohit Sharma", platform: "Google", rating: 5, text: "Excellent care and painless treatment. Highly recommended!", time: "1m ago", color: "text-[#4285F4]", bg: "bg-[#4285F4]/10", label: "G", sentiment: "positive" },
+    { name: "Megha Singh", platform: "Facebook", rating: 1, text: "Booked appointment, had to wait 45 minutes for my session.", time: "1h ago", color: "text-[#1877F2]", bg: "bg-[#1877F2]/10", label: "f", sentiment: "negative" },
+    { name: "Lakshmi Menon", platform: "Justdial", rating: 4, text: "Courteous staff and state of the art equipment. Very satisfied.", time: "3d ago", color: "text-[#F04E23]", bg: "bg-[#F04E23]/10", label: "Jd", sentiment: "positive" },
   ];
 
   return (
@@ -280,13 +288,13 @@ function HeroPhoneMockup() {
           <div className="flex items-center justify-between px-6 pt-3 pb-1">
             <span className="text-[10px] font-semibold text-slate-500">9:41</span>
             <span className="h-[22px] w-[80px] rounded-full bg-slate-900" />
-            <span className="text-[10px] text-slate-500">📶🔋</span>
+            <span className="text-[10px] text-slate-500">5G · 100%</span>
           </div>
 
           {/* App header */}
           <div className="px-4 py-2.5 flex items-center justify-between border-b border-slate-100">
             <div>
-              <p className="text-[9px] text-slate-400 font-medium">SMILE DENTAL CARE</p>
+              <p className="text-[9px] text-slate-400 font-medium">METRO DENTAL CLINIC</p>
               <p className="text-xs font-bold text-slate-900">Today&apos;s Reviews</p>
             </div>
             <span className="relative grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white">
@@ -328,7 +336,7 @@ function HeroPhoneMockup() {
                 <p className="text-[9px] text-slate-500 leading-snug line-clamp-2">{r.text}</p>
                 {r.sentiment === "positive" && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 text-white text-[8px] px-2 py-0.5 w-fit">
-                    <Sparkles size={7} /> AI Reply
+                    <Sparkles size={7} /> AI Replied
                   </span>
                 )}
                 {r.sentiment === "negative" && (
@@ -348,10 +356,10 @@ function HeroPhoneMockup() {
             >
               <div className="flex items-center gap-1.5 text-[8px] font-medium text-emerald-700 mb-1">
                 <CheckCircle2 size={9} />
-                AI auto-replied · friendly tone
+                AI auto-replied · Warm tone
               </div>
               <p className="text-[8px] text-emerald-800/80 leading-snug">
-                &quot;Bahut dhanyawaad Rohit ji! Aapke words hamare pure team ko motivate karte hain. Phir se zaroor aayein 🙏&quot;
+                &quot;Thank you so much Rohit! Your kind words mean the world to our team. We look forward to seeing you again soon! 🙂&quot;
               </p>
             </motion.div>
           </div>
@@ -364,10 +372,10 @@ function HeroPhoneMockup() {
 // ─── PROBLEM SECTION ────────────────────────────────────────────────
 function ProblemSection() {
   const problems = [
-    { icon: Globe, text: "3 alag apps kholne padte hain — Google, Facebook, Justdial", color: "from-orange-500 to-red-500" },
-    { icon: MessageCircle, text: "Negative review ka reply kaise likhein? Galat reply se aur damage hota hai", color: "from-red-500 to-pink-500" },
-    { icon: Clock, text: "Ek ek reply me 10-15 minute lagte hain — din me 5 reviews = 1+ hour gone", color: "from-purple-500 to-indigo-500" },
-    { icon: Smartphone, text: "Desktop pe time nahi hai, phone pe manage karna mushkil hai", color: "from-blue-500 to-cyan-500" },
+    { icon: Globe, text: "Juggling 3 different portals every day — Google Maps, Facebook, and Justdial", color: "from-orange-500 to-red-500" },
+    { icon: MessageCircle, text: "Fear of handling negative feedback — an uncalculated reply can damage your brand", color: "from-red-500 to-pink-500" },
+    { icon: Clock, text: "15 minutes per reply adds up — managing 5 reviews a day wastes over an hour daily", color: "from-purple-500 to-indigo-500" },
+    { icon: Smartphone, text: "Clunky desktop-first dashboards that are painful to navigate on mobile devices", color: "from-blue-500 to-cyan-500" },
   ];
 
   return (
@@ -376,11 +384,11 @@ function ProblemSection() {
         <FadeUp>
           <div className="text-center max-w-2xl mx-auto">
             <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
-              😰 Sound familiar?
+              The Problem
             </Badge>
             <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Aapke customers daily review dete hain.{" "}
-              <span className="text-red-500">Aap reply karna chahte ho but...</span>
+              Your customers leave reviews daily.{" "}
+              <span className="text-red-500">Replying shouldn&apos;t feel like a chore.</span>
             </h2>
           </div>
         </FadeUp>
@@ -402,7 +410,7 @@ function ProblemSection() {
         <FadeUp delay={0.4}>
           <div className="mt-10 text-center">
             <p className="text-lg font-semibold text-emerald-700">
-              ReviewMitra yeh sab solve karta hai — <span className="underline decoration-emerald-300 decoration-2 underline-offset-4">2 minute me setup, phir sab automatic.</span>
+              ReviewMitra automates the entire lifecycle — <span className="underline decoration-emerald-300 decoration-2 underline-offset-4">2-minute setup, total peace of mind.</span>
             </p>
           </div>
         </FadeUp>
@@ -416,22 +424,22 @@ function HowItWorks() {
   const steps = [
     {
       step: "01",
-      title: "Connect karein",
-      desc: "Google Business, Facebook Page ya Justdial URL ek click me connect karein. OAuth secure login — hum aapka password kabhi nahi lete.",
+      title: "Connect Platforms",
+      desc: "Link Google Business Profile, Facebook Page, and Justdial listings in one click. Secure OAuth authentication keeps your credentials safe.",
       icon: Globe,
       gradient: "from-emerald-500 to-teal-500",
     },
     {
       step: "02",
-      title: "Reviews aa jaayenge",
-      desc: "Saare reviews ek unified inbox me auto-sync hote hain. Har 15 minute me naye reviews check hote hain. WhatsApp pe instant alert milta hai.",
+      title: "Instant Sync & Alerts",
+      desc: "All incoming feedback flows into a unified inbox with automated sentiment classification and optional WhatsApp summary alerts.",
       icon: Bell,
       gradient: "from-teal-500 to-sky-500",
     },
     {
       step: "03",
-      title: "AI reply kare",
-      desc: "1-tap pe AI perfect reply generate kare — ya auto-reply ON kar do. Positive reviews ka reply automatic, negative reviews ka draft tayyar. Aap sirf approve karo.",
+      title: "AI Auto-Reply & Boost",
+      desc: "Positive reviews receive instant professional replies. Negative feedback is queued safely for owner review, and in-store QR codes drive new 5★ ratings.",
       icon: Bot,
       gradient: "from-sky-500 to-indigo-500",
     },
@@ -444,10 +452,10 @@ function HowItWorks() {
           <div className="text-center max-w-2xl mx-auto">
             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
               <Zap size={12} className="mr-1.5" />
-              3 simple steps
+              Streamlined Workflow
             </Badge>
             <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Setup 2 minute. Phir sab automatic.
+              Setup in 2 minutes. Runs effortlessly 24/7.
             </h2>
           </div>
         </FadeUp>
@@ -482,14 +490,14 @@ function HowItWorks() {
 // ─── FEATURES GRID ──────────────────────────────────────────────────
 function FeaturesGrid() {
   const features = [
-    { icon: Globe, title: "Multi-Platform Sync", desc: "Google + Facebook + Justdial reviews ek dashboard me. Real-time sync with webhooks.", color: "bg-blue-50 text-blue-600" },
-    { icon: Bot, title: "AI Auto-Reply", desc: "Positive reviews ka automatic reply — 24/7, bina kisi manual kaam ke. Tone customizable.", color: "bg-emerald-50 text-emerald-600" },
-    { icon: Languages, title: "Hinglish Support", desc: "Hindi-English mix me natural replies jo Indian customer ke saath connect kare.", color: "bg-orange-50 text-orange-600" },
-    { icon: BarChart3, title: "Sentiment Analysis", desc: "Har review automatically positive, neutral ya negative detect hota hai.", color: "bg-purple-50 text-purple-600" },
-    { icon: Bell, title: "Instant Alerts", desc: "WhatsApp pe real-time notification jab naya review aaye. Kabhi koi review miss nahi hoga.", color: "bg-pink-50 text-pink-600" },
-    { icon: Lock, title: "Bank-Grade Security", desc: "AES-256 token encryption + strict tenant isolation. Aapka data sirf aapka.", color: "bg-slate-100 text-slate-700" },
-    { icon: Smartphone, title: "Mobile Ready", desc: "Phone pe perfect chalega — app jaisa experience, install bhi kar sakte hain.", color: "bg-teal-50 text-teal-600" },
-    { icon: Zap, title: "1-Click Reply", desc: "Generate → Edit → Post in 3 seconds. Fastest review reply experience in India.", color: "bg-amber-50 text-amber-600" },
+    { icon: Globe, title: "Multi-Platform Aggregation", desc: "Manage Google Business, Facebook Pages, and Justdial reviews from a single unified inbox.", color: "bg-blue-50 text-blue-600" },
+    { icon: Bot, title: "Automated AI Replies", desc: "Instantly respond to 4★ and 5★ reviews with personalized, non-robotic replies around the clock.", color: "bg-emerald-50 text-emerald-600" },
+    { icon: Languages, title: "Multilingual Intelligence", desc: "Flawlessly comprehends and crafts responses in English, Hindi, Hinglish, Gujarati, Marathi, and 10+ languages.", color: "bg-orange-50 text-orange-600" },
+    { icon: QrCode, title: "Smart In-Store QR Booster", desc: "Print custom QR code cards for your store counter. Customers scan, tap a 5★ draft, and post in seconds.", color: "bg-purple-50 text-purple-600" },
+    { icon: BarChart3, title: "Sentiment Intelligence", desc: "Automated sentiment tagging ensures negative reviews receive empathetic, safety-checked care.", color: "bg-pink-50 text-pink-600" },
+    { icon: Lock, title: "Bank-Grade Encryption", desc: "All OAuth tokens and API credentials are protected with AES-256-GCM hardware-grade security.", color: "bg-slate-100 text-slate-700" },
+    { icon: Smartphone, title: "Mobile PWA Experience", desc: "Install ReviewMitra directly on your mobile device for lightning-fast review management on the go.", color: "bg-teal-50 text-teal-600" },
+    { icon: Zap, title: "1-Click Custom Approval", desc: "Review, customize, and post AI responses in under 3 seconds whenever manual approval is preferred.", color: "bg-amber-50 text-amber-600" },
   ];
 
   return (
@@ -499,13 +507,13 @@ function FeaturesGrid() {
           <div className="text-center max-w-2xl mx-auto">
             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
               <Sparkles size={12} className="mr-1.5" />
-              Everything you need
+              Comprehensive Platform
             </Badge>
             <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Ek dashboard. Sab powers.
+              Everything Your Business Needs to Shine
             </h2>
             <p className="mt-3 text-base text-slate-600">
-              Western tools like Birdeye charge ₹7,000-₹35,000/month. We deliver the same core value at ₹499.
+              Enterprise reputation platforms charge $100–$300/month. ReviewMitra delivers world-class AI automation starting at just ₹399.
             </p>
           </div>
         </FadeUp>
@@ -541,23 +549,23 @@ function InteractiveDemo() {
       rating: 5,
       text: "Painless tooth extraction! The doctor explained every step before starting. Affordable and professional.",
       sentiment: "positive",
-      reply: "Bahut dhanyawaad Priya ji! Aapke kind words Dr. Mehta aur pure team ko motivate karte hain. Hum hamesha painless aur transparent treatment dene ki koshish karte hain. Phir se zaroor aayein — aapki smile hamare liye important hai 🙏",
+      reply: "Thank you so much Priya! Dr. Mehta and our entire clinical team are delighted to hear you had a comfortable and painless experience. We take pride in transparent care. Looking forward to keeping your smile bright at your next checkup! 🙂",
     },
     {
       name: "Mohammed Ali",
       platform: "Google",
       rating: 1,
-      text: "Took appointment for 6pm, reached on time, was made to wait 1.5 hours. Very unprofessional.",
+      text: "Took appointment for 6pm, reached on time, was made to wait 1.5 hours. Very frustrating.",
       sentiment: "negative",
-      reply: "Mohammed bhai, hum samajh sakte hain ki aapko kitni takleef hui hogi. 1.5 hour ka wait bilkul unacceptable hai. Maine personally reception team se baat ki hai aur ab se appointment slots ka buffer time badhaya gaya hai. Aap mujhe directly +919876543210 pe call karein — main personally ensure karunga ki aapka next visit perfect ho. 🙏",
+      reply: "Dear Mohammed, we sincerely apologize for the delay you experienced. A 1.5-hour wait is unacceptable, and we have adjusted our doctor buffer times to prevent this. Please call our front desk directly at +91 98765 43210 so our management can personally ensure your next appointment is seamless. 🙏",
     },
     {
       name: "Kavita Reddy",
       platform: "Facebook",
       rating: 5,
-      text: "Best dental clinic! Got my teeth whitening done — absolutely loved the result.",
+      text: "Best dental clinic! Got teeth whitening done — absolutely loved the sparkling result.",
       sentiment: "positive",
-      reply: "Thank you so much Kavita ji! 😊 We're really happy that you loved the teeth whitening result. Dr. Mehta uses the latest Zoom whitening technology for best outcomes. Do share your dazzling smile with friends — and we'll take care of theirs too! See you at your next checkup 🦷✨",
+      reply: "Thank you so much Kavita! 😊 We are thrilled that you loved the whitening results. Keep sharing your confident smile with family and friends — we look forward to welcoming you back! 🦷✨",
     },
   ];
 
@@ -567,7 +575,7 @@ function InteractiveDemo() {
     setTimeout(() => {
       setGenerating(false);
       setShowReply(true);
-    }, 1500);
+    }, 1200);
   };
 
   useEffect(() => {
@@ -584,13 +592,13 @@ function InteractiveDemo() {
           <div className="text-center max-w-2xl mx-auto">
             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
               <Play size={12} className="mr-1.5" />
-              Try it yourself
+              Live Demonstration
             </Badge>
             <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Dekho AI kaise reply karta hai
+              Experience the AI Reply Engine
             </h2>
             <p className="mt-3 text-base text-slate-600">
-              Neeche koi bhi review select karo aur &quot;AI Reply&quot; button dabao. Real demo hai — koi signup nahi chahiye.
+              Select a review below and click &quot;Generate AI Reply&quot;. Fully interactive — no registration required.
             </p>
           </div>
         </FadeUp>
@@ -663,10 +671,10 @@ function InteractiveDemo() {
                     className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 shadow-sm"
                   >
                     <Sparkles size={14} className={generating ? "animate-spin" : ""} />
-                    {generating ? "Generating..." : showReply ? "Regenerate" : "AI Reply"}
+                    {generating ? "Crafting reply..." : showReply ? "Regenerate" : "Generate AI Reply"}
                   </Button>
                   {!showReply && !generating && (
-                    <span className="text-xs text-slate-400">← Try it! Click the button</span>
+                    <span className="text-xs text-slate-400">← Click to test live AI response</span>
                   )}
                 </div>
               </div>
@@ -684,14 +692,14 @@ function InteractiveDemo() {
                     <div className="border-t border-emerald-200 bg-emerald-50/50 p-5 sm:p-6">
                       <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 mb-2">
                         <CheckCircle2 size={14} />
-                        AI-generated reply · Friendly tone
+                        AI-generated draft · Friendly business tone
                       </div>
                       <p className="text-sm text-emerald-900/80 leading-relaxed">{review.reply}</p>
                       <div className="mt-3 flex items-center gap-2">
                         <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 text-xs h-8">
-                          <CheckCircle2 size={12} /> Post reply
+                          <CheckCircle2 size={12} /> Publish to Platform
                         </Button>
-                        <span className="text-[10px] text-slate-500">This is a demo — no reply will be posted</span>
+                        <span className="text-[10px] text-slate-500">Live preview — no action taken on demo</span>
                       </div>
                     </div>
                   </motion.div>
@@ -709,21 +717,21 @@ function InteractiveDemo() {
 function TestimonialsSection() {
   const testimonials = [
     {
-      name: "Dr. Mehta",
-      business: "Smile Dental Care, Andheri",
-      text: "Pehle roz 30-40 min lagta tha Google aur Justdial reviews ka reply dene me. Ab ReviewMitra se sab automatic ho jaata hai. Mera time patients ko milta hai, reviews ko nahi.",
+      name: "Dr. Arvind Mehta",
+      business: "Smile Dental Clinic, Mumbai",
+      text: "We used to spend 40 minutes every evening manually writing responses on Google Maps and Justdial. With ReviewMitra, positive reviews are replied to instantly, and my team spends their time with patients instead.",
       rating: 5,
     },
     {
       name: "Priyanka Nair",
-      business: "Glow & Grace Salon, Bandra",
-      text: "Negative review ka reply likhna sabse mushkil kaam tha. ReviewMitra ka AI itna polite aur professional reply likhta hai ki customer bhi impress ho jaata hai. Life saver!",
+      business: "Glow & Grace Salon, Bengaluru",
+      text: "Handling sensitive feedback was always stressful. ReviewMitra drafts polite, de-escalating responses with owner contact details that win customers back. An absolute game-changer.",
       rating: 5,
     },
     {
-      name: "Raj Malhotra",
-      business: "Iron Fitness Gym, Powai",
-      text: "Mere 3 branches hain. Pehle teen alag-alag dashboards check karta tha. Ab ek jagah sab reviews dikh jaate hain. Plus Hinglish replies ekdam natural lagte hain.",
+      name: "Rajesh Malhotra",
+      business: "Iron Fitness Gyms, Delhi NCR",
+      text: "Managing reputation across 3 branches was painful. Having all reviews in one unified inbox plus multilingual support gives us immense peace of mind.",
       rating: 5,
     },
   ];
@@ -735,10 +743,10 @@ function TestimonialsSection() {
           <div className="text-center max-w-2xl mx-auto">
             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
               <Star size={12} className="mr-1.5 fill-emerald-600" />
-              Trusted by Indian MSMEs
+              Trusted by Hundreds of Local Businesses
             </Badge>
             <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Unke alfaaz, unki kahani
+              Loved by Clinics, Salons & Restaurants
             </h2>
           </div>
         </FadeUp>
@@ -777,31 +785,31 @@ function PricingPreview() {
   const plans = [
     {
       name: "Starter",
-      monthly: 499,
-      tagline: "Perfect for single-location shops",
+      monthly: 399,
+      tagline: "Ideal for single-location shops & practices",
       features: [
         "1 Business Location",
         "Google + Facebook + Justdial",
         "100 AI Replies / month",
-        "Daily review sync",
-        "WhatsApp alerts",
-        "English + Hinglish tones",
+        "Daily review auto-sync",
+        "Smart in-store Review QR booster",
+        "English, Hindi & Hinglish tones",
       ],
       highlight: false,
       icon: Star,
     },
     {
       name: "Growth",
-      monthly: 899,
-      tagline: "For growing MSMEs with multiple outlets",
+      monthly: 799,
+      tagline: "For high-volume businesses & multiple outlets",
       features: [
         "Up to 2 Business Locations",
         "Unlimited AI Replies",
-        "Real-time webhook sync",
-        "4× daily Justdial scrape",
-        "Custom Brand Tone",
-        "WhatsApp instant review alerts",
-        "Priority founder support",
+        "Real-time webhook review sync",
+        "4× daily Justdial monitoring",
+        "Custom brand voice & learning memory",
+        "Instant review alert notifications",
+        "Priority developer support",
       ],
       highlight: true,
       icon: Zap,
@@ -814,14 +822,13 @@ function PricingPreview() {
         <FadeUp>
           <div className="text-center max-w-2xl mx-auto">
             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-              ₹499 se shuru — Bharat ke MSMEs ke liye
+              Affordable Pricing · No Hidden Fees
             </Badge>
             <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Transparent pricing. No setup fee. Cancel anytime.
+              Transparent, Fair, and Predictable
             </h2>
             <p className="mt-3 text-base text-slate-600">
-              Western tools like Birdeye / Podium charge ₹7,000–₹35,000/month.
-              We deliver the same core value at a price a local shop owner can afford.
+              Try every feature free for 7 days. Upgrade only when you see real growth in your reviews and rating.
             </p>
           </div>
         </FadeUp>
@@ -851,7 +858,7 @@ function PricingPreview() {
                       <Icon size={20} />
                     </span>
                     <div>
-                      <p className="font-bold text-lg">{plan.name}</p>
+                      <p className="font-bold text-lg text-slate-900">{plan.name}</p>
                       <p className="text-xs text-slate-500">{plan.tagline}</p>
                     </div>
                   </div>
@@ -861,7 +868,7 @@ function PricingPreview() {
                     <span className="text-sm text-slate-500">/month</span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    7-day free trial · No credit card required
+                    7-day free trial · Cancel anytime
                   </p>
 
                   <ul className="mt-5 space-y-2.5 flex-1">
@@ -881,7 +888,7 @@ function PricingPreview() {
                     }`}
                     asChild
                   >
-                    <Link href="/signup">Start free trial — 7 days</Link>
+                    <Link href="/signup">Start 7-Day Free Trial</Link>
                   </Button>
                 </Card>
               </FadeUp>
@@ -893,8 +900,8 @@ function PricingPreview() {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
             <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-600" /> AES-256 token encryption</span>
             <span className="flex items-center gap-1.5"><Building2 size={14} className="text-emerald-600" /> Strict tenant isolation</span>
-            <span className="flex items-center gap-1.5"><TrendingUp size={14} className="text-emerald-600" /> Razorpay UPI AutoPay</span>
-            <span className="flex items-center gap-1.5"><Sparkles size={14} className="text-emerald-600" /> Hinglish-native AI</span>
+            <span className="flex items-center gap-1.5"><TrendingUp size={14} className="text-emerald-600" /> Powered by Dodo Payments</span>
+            <span className="flex items-center gap-1.5"><Sparkles size={14} className="text-emerald-600" /> 10+ language AI models</span>
           </div>
         </FadeUp>
       </div>
@@ -915,12 +922,12 @@ function FinalCTA() {
 
             <div className="relative z-10">
               <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                Reviews ka reply dena ab{" "}
-                <span className="text-emerald-200">1-click ka kaam hai</span>
+                Supercharge your business reputation{" "}
+                <span className="text-emerald-200">on autopilot</span>
               </h2>
               <p className="mt-4 text-base sm:text-lg text-emerald-100 max-w-xl mx-auto">
-                7 din free trial — koi credit card nahi chahiye. 2 minute me setup.
-                Agar pasand nahi aaya to cancel karo, koi sawal nahi.
+                7 days free trial · Setup in 2 minutes · No credit card required.
+                Start turning reviews into loyal customer relationships today.
               </p>
               <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
                 <Button
@@ -929,7 +936,7 @@ function FinalCTA() {
                   asChild
                 >
                   <Link href="/signup">
-                    Abhi shuru karein — Free
+                    Get Started Free
                     <ArrowRight size={18} />
                   </Link>
                 </Button>
@@ -939,9 +946,9 @@ function FinalCTA() {
                   className="border-white/30 text-white hover:bg-white/10 gap-2 text-base h-12 px-7"
                   asChild
                 >
-                  <a href="https://wa.me/919876543210?text=Namaste,%20mujhe%20ReviewMitra%20ke%20baare%20me%20jaanana%20hai" target="_blank" rel="noopener noreferrer">
+                  <a href="https://wa.me/919876543210?text=Hello,%20I%20would%20like%20to%20know%20more%20about%20ReviewMitra" target="_blank" rel="noopener noreferrer">
                     <MessageCircle size={18} />
-                    Chat on WhatsApp
+                    Chat with Founder
                   </a>
                 </Button>
               </div>
@@ -965,12 +972,15 @@ function SiteFooter() {
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 text-white">
                 <Star size={16} fill="white" strokeWidth={0} />
               </span>
-              <span className="font-bold text-lg">
-                Review<span className="text-emerald-600">Mitra</span>
-              </span>
+              <div className="flex flex-col">
+                <span className="font-bold text-lg text-slate-900 leading-none">
+                  Review<span className="text-emerald-600">Mitra</span>
+                </span>
+                <span className="text-[9px] text-slate-400 font-medium tracking-wider uppercase mt-0.5">by OpenSoz</span>
+              </div>
             </Link>
             <p className="mt-3 text-xs text-slate-500 leading-relaxed max-w-[200px]">
-              Bharat ke local businesses ke liye bana AI-powered review reply engine.
+              AI-powered review management and auto-reply suite for local businesses. An OpenSoz product.
             </p>
           </div>
 
@@ -980,17 +990,18 @@ function SiteFooter() {
             <ul className="space-y-2 text-sm">
               <li><a href="#features" className="text-slate-500 hover:text-slate-900 transition-colors">Features</a></li>
               <li><a href="#pricing" className="text-slate-500 hover:text-slate-900 transition-colors">Pricing</a></li>
-              <li><a href="#demo" className="text-slate-500 hover:text-slate-900 transition-colors">Live Demo</a></li>
-              <li><a href="#how-it-works" className="text-slate-500 hover:text-slate-900 transition-colors">How it works</a></li>
+              <li><a href="#demo" className="text-slate-500 hover:text-slate-900 transition-colors">Interactive Demo</a></li>
+              <li><a href="#how-it-works" className="text-slate-500 hover:text-slate-900 transition-colors">How It Works</a></li>
             </ul>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Platforms</p>
+            <p className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Legal & Company</p>
             <ul className="space-y-2 text-sm">
-              <li><span className="text-slate-500">Google Business Profile</span></li>
-              <li><span className="text-slate-500">Facebook Page Reviews</span></li>
-              <li><span className="text-slate-500">Justdial Reviews</span></li>
+              <li><Link href="/terms" className="text-slate-500 hover:text-slate-900 transition-colors">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="text-slate-500 hover:text-slate-900 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/refund-policy" className="text-slate-500 hover:text-slate-900 transition-colors text-amber-600">Refund Policy</Link></li>
+              <li><a href="https://opensoz.com" target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-900 transition-colors">OpenSoz ↗</a></li>
             </ul>
           </div>
 
@@ -1005,12 +1016,12 @@ function SiteFooter() {
                   className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 transition-colors"
                 >
                   <MessageCircle size={13} />
-                  WhatsApp Support
+                  WhatsApp Direct
                 </a>
               </li>
               <li>
-                <a href="mailto:hello@reviewmitra.in" className="text-slate-500 hover:text-slate-900 transition-colors">
-                  hello@reviewmitra.in
+                <a href="mailto:support@opensoz.com" className="text-slate-500 hover:text-slate-900 transition-colors">
+                  support@opensoz.com
                 </a>
               </li>
             </ul>
@@ -1018,11 +1029,11 @@ function SiteFooter() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-[11px] text-slate-400">
-          <p>© {new Date().getFullYear()} ReviewMitra. Made in Bharat 🇮🇳 for Bharat.</p>
+          <p>© {new Date().getFullYear()} ReviewMitra. Published by <a href="https://opensoz.com" target="_blank" rel="noreferrer" className="underline hover:text-slate-600">OpenSoz</a>. All rights reserved.</p>
           <div className="flex gap-4">
-            <a href="#" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-slate-600 transition-colors">Terms of Service</a>
-            <a href="#" className="hover:text-slate-600 transition-colors">Refund Policy</a>
+            <Link href="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
+            <Link href="/refund-policy" className="hover:text-slate-600 transition-colors">Refund Policy</Link>
           </div>
         </div>
       </div>

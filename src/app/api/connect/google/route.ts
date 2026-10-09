@@ -5,18 +5,27 @@ export async function GET(req: NextRequest) {
   const businessId = searchParams.get("businessId") || "default";
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/connect/google/callback`;
+  const origin = req.nextUrl.origin || process.env.NEXTAUTH_URL || "https://reviewmitra.opensoz.com";
+  const redirectUri = `${origin}/api/connect/google/callback`;
 
-  // If real Google OAuth credentials exist, redirect to real consent screen
-  if (clientId) {
-    const scope = encodeURIComponent("https://www.googleapis.com/auth/business.manage");
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-      redirectUri
-    )}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${businessId}`;
-
-    return NextResponse.redirect(googleAuthUrl);
+  if (!clientId) {
+    return NextResponse.redirect(
+      new URL("/dashboard/connect?error=missing_google_client_id", req.url)
+    );
   }
 
-  // Development / Demo fast connect mode
-  return NextResponse.redirect(`${redirectUri}?code=mock_google_code&state=${businessId}`);
+  // Google OAuth 2.0 authorization URL
+  const scopes = [
+    "https://www.googleapis.com/auth/business.manage",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+  ].join(" ");
+
+  const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+    redirectUri
+  )}&response_type=code&scope=${encodeURIComponent(
+    scopes
+  )}&access_type=offline&prompt=consent&state=${encodeURIComponent(businessId)}`;
+
+  return NextResponse.redirect(googleAuthUrl);
 }
