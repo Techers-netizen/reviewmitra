@@ -31,9 +31,14 @@ export default function ConnectPlatformsPage() {
   const [google, setGoogle] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   const [facebook, setFacebook] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   const [justdial, setJustdial] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
+  const [indiamart, setIndiamart] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   
   const [justdialUrl, setJustdialUrl] = useState("");
   const [justdialLoading, setJustdialLoading] = useState(false);
+  const [imApiKey, setImApiKey] = useState("");
+  const [imMobile, setImMobile] = useState("");
+  const [imLoading, setImLoading] = useState(false);
+
   const [syncingPlatform, setSyncingPlatform] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -48,6 +53,7 @@ export default function ConnectPlatformsPage() {
         setGoogle(data.google || { connected: false, account: null, lastSyncAt: null });
         setFacebook(data.facebook || { connected: false, account: null, lastSyncAt: null });
         setJustdial(data.justdial || { connected: false, account: null, lastSyncAt: null });
+        setIndiamart(data.indiamart || { connected: false, account: null, lastSyncAt: null });
       }
     } catch (e) {
       console.error("Failed to load platform status:", e);
@@ -157,6 +163,33 @@ export default function ConnectPlatformsPage() {
       console.error("Justdial connect error:", e);
     } finally {
       setJustdialLoading(false);
+    }
+  };
+
+  // Connect IndiaMART seller CRM
+  const handleIndiaMartConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imApiKey || !imMobile) return;
+    setImLoading(true);
+    try {
+      const res = await fetch("/api/connect/indiamart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: imApiKey, mobileNumber: imMobile }),
+      });
+      if (res.ok) {
+        setNotification({ type: "success", message: "IndiaMART seller CRM connected! Buyer ratings linked." });
+        setImApiKey("");
+        setImMobile("");
+        await fetchStatus();
+      } else {
+        const err = await res.json();
+        setNotification({ type: "error", message: err.error || "Failed to connect IndiaMART." });
+      }
+    } catch (e) {
+      console.error("IndiaMART connect error:", e);
+    } finally {
+      setImLoading(false);
     }
   };
 
@@ -402,6 +435,80 @@ export default function ConnectPlatformsPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleDisconnect("justdial")}
+                      className="text-xs text-red-600 hover:text-red-700 h-7 px-2"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* 4. IndiaMART */}
+        <Card className="p-5 sm:p-6 border-slate-200 hover:border-slate-300 transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex items-start gap-4 flex-1">
+              <div className="h-12 w-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+                <span className="font-extrabold text-blue-700 text-base">IM</span>
+              </div>
+              <div className="space-y-3 flex-1">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="font-bold text-base text-slate-900">IndiaMART Seller B2B Integration</h3>
+                    {indiamart.connected ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <CheckCircle2 size={12} /> Connected (CRM Active)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                        Not Connected
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Connect your IndiaMART CRM API Key and Seller Mobile to sync B2B buyer inquiries, verified ratings, and auto-dispatch instant replies.
+                  </p>
+                </div>
+
+                {!indiamart.connected ? (
+                  <form onSubmit={handleIndiaMartConnect} className="flex flex-col sm:flex-row gap-2 max-w-xl">
+                    <Input
+                      type="password"
+                      placeholder="IndiaMART CRM API Key"
+                      value={imApiKey}
+                      onChange={(e) => setImApiKey(e.target.value)}
+                      className="text-xs h-9 flex-1"
+                      required
+                    />
+                    <Input
+                      type="tel"
+                      placeholder="Seller Mobile (+91)"
+                      value={imMobile}
+                      onChange={(e) => setImMobile(e.target.value)}
+                      className="text-xs h-9 w-36"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={imLoading}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold shrink-0"
+                    >
+                      {imLoading ? "Linking..." : "Connect IndiaMART"}
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-3 text-xs text-slate-600">
+                    <span className="font-medium text-slate-700 truncate max-w-md">
+                      Account: {indiamart.account || "IndiaMART Seller Account"}
+                    </span>
+                    <span>·</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDisconnect("indiamart")}
                       className="text-xs text-red-600 hover:text-red-700 h-7 px-2"
                     >
                       Remove

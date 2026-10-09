@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     const googleConn = business.connections.find((c: any) => c.platformName === "google");
     const fbConn = business.connections.find((c: any) => c.platformName === "facebook");
     const jdConn = business.connections.find((c: any) => c.platformName === "justdial");
+    const imConn = business.connections.find((c: any) => c.platformName === "indiamart");
 
     return NextResponse.json({
       businessId: business.id,
@@ -52,6 +53,11 @@ export async function GET(req: NextRequest) {
         connected: !!jdConn && jdConn.status === "connected",
         account: jdConn?.externalAccountId || null,
         lastSyncAt: jdConn?.lastSyncAt || null,
+      },
+      indiamart: {
+        connected: !!imConn && imConn.status === "connected",
+        account: imConn?.externalAccountId || null,
+        lastSyncAt: imConn?.lastSyncAt || null,
       },
     });
   } catch (error: any) {

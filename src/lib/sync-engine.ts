@@ -22,7 +22,7 @@ export function classifySentiment(rating: number, text?: string): "positive" | "
  */
 export async function ingestReviews(
   businessId: string,
-  platformName: "google" | "facebook" | "justdial",
+  platformName: "google" | "facebook" | "justdial" | "indiamart",
   rawReviews: RawReviewPayload[]
 ) {
   const business = await db.business.findUnique({
