@@ -270,6 +270,21 @@ export function Dashboard() {
               Try again
             </Button>
           </Card>
+        ) : (!data || data.reviews.length === 0) ? (
+          <Card className="p-10 text-center space-y-3 border-dashed border-slate-200">
+            <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 grid place-items-center text-slate-400">
+              <Inbox size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">Unified Inbox Khali Hai</p>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                Aapke is account par abhi koi review sync nahi hua hai. Google Business Profile ya Facebook Page connect karke live reviews fetch karein.
+              </p>
+            </div>
+            <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">
+              <Link href="/dashboard/connect">Connect Platform</Link>
+            </Button>
+          </Card>
         ) : filtered.length === 0 ? (
           <Card className="p-8 text-center">
             <CheckCircle2 size={32} className="mx-auto text-emerald-500" />

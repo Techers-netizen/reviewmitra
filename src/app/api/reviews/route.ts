@@ -1,23 +1,61 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-// GET /api/reviews — returns the unified review feed for the demo business
+// GET /api/reviews — returns the unified review feed for the logged in user's business
 export async function GET() {
   try {
-    const business = await db.business.findFirst({
-      orderBy: { createdAt: "asc" },
-      include: {
-        reviews: {
-          orderBy: { reviewTimestamp: "desc" },
-          include: { replies: { orderBy: { createdAt: "desc" } } },
-        },
-        connections: true,
-        subscriptions: true,
-      },
-    });
+    const session = await getServerSession(authOptions);
 
+    let business: any = null;
+    if (session?.user) {
+      const userId = (session.user as any).id;
+      const businessId = (session.user as any).businessId;
+
+      if (businessId) {
+        business = await db.business.findUnique({
+          where: { id: businessId },
+          include: {
+            reviews: {
+              orderBy: { reviewTimestamp: "desc" },
+              include: { replies: { orderBy: { createdAt: "desc" } } },
+            },
+            connections: true,
+            subscriptions: true,
+          },
+        });
+      }
+
+      if (!business && userId) {
+        business = await db.business.findFirst({
+          where: { ownerId: userId },
+          include: {
+            reviews: {
+              orderBy: { reviewTimestamp: "desc" },
+              include: { replies: { orderBy: { createdAt: "desc" } } },
+            },
+            connections: true,
+            subscriptions: true,
+          },
+        });
+      }
+    }
+
+    // If no business found, return empty zero-state for clean production
     if (!business) {
-      return NextResponse.json({ error: "No demo business seeded" }, { status: 404 });
+      return NextResponse.json({
+        business: {
+          id: "",
+          name: "My Business",
+          category: "clinic",
+          phoneSupport: null,
+          defaultTone: "friendly",
+        },
+        connections: [],
+        subscription: null,
+        reviews: [],
+      });
     }
 
     return NextResponse.json({

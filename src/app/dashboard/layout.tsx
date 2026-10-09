@@ -28,7 +28,7 @@ import { signOut, useSession } from "next-auth/react";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/dashboard/reviews", label: "Unified Inbox", icon: MessageSquare, badge: "3" },
+  { href: "/dashboard/reviews", label: "Unified Inbox", icon: MessageSquare },
   { href: "/dashboard/connect", label: "Connect Platforms", icon: Link2 },
   { href: "/dashboard/qr-booster", label: "QR Booster", icon: QrCode, isNew: true },
   { href: "/dashboard/auto-reply", label: "AI Auto-Reply", icon: Bot },
