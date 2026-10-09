@@ -12,9 +12,10 @@ export async function POST(req: NextRequest) {
 
     let business: any = null;
 
-    if (session?.user?.id) {
+    const userId = (session?.user as any)?.id;
+    if (userId) {
       business = await db.business.findFirst({
-        where: { ownerId: session.user.id },
+        where: { ownerId: userId },
       });
     }
 

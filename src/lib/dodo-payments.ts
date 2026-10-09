@@ -102,24 +102,33 @@ export async function handleDodoWebhookEvent(event: any) {
       const periodEnd = new Date();
       periodEnd.setDate(periodEnd.getDate() + 30); // 30 days access
 
-      await db.subscription.upsert({
+      const existing = await db.subscription.findFirst({
         where: { businessId },
-        update: {
-          planName: `${planType}_${planType === "growth" ? "799" : "399"}`,
-          dodoPaymentId: paymentId,
-          status: "active",
-          monthlyAiReplyLimit: limit,
-          currentPeriodEnd: periodEnd,
-        },
-        create: {
-          businessId,
-          planName: `${planType}_${planType === "growth" ? "799" : "399"}`,
-          dodoPaymentId: paymentId,
-          status: "active",
-          monthlyAiReplyLimit: limit,
-          currentPeriodEnd: periodEnd,
-        },
       });
+
+      if (existing) {
+        await db.subscription.update({
+          where: { id: existing.id },
+          data: {
+            planName: `${planType}_${planType === "growth" ? "799" : "399"}`,
+            dodoPaymentId: paymentId,
+            status: "active",
+            monthlyAiReplyLimit: limit,
+            currentPeriodEnd: periodEnd,
+          },
+        });
+      } else {
+        await db.subscription.create({
+          data: {
+            businessId,
+            planName: `${planType}_${planType === "growth" ? "799" : "399"}`,
+            dodoPaymentId: paymentId,
+            status: "active",
+            monthlyAiReplyLimit: limit,
+            currentPeriodEnd: periodEnd,
+          },
+        });
+      }
 
       console.log(`Updated subscription for business ${businessId} to active ${planType}`);
     }
