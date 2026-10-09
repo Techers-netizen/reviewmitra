@@ -114,6 +114,57 @@ export const authOptions: NextAuthOptions = {
           };
         }
 
+        // Firebase mode (Google / Facebook OAuth)
+        if (mode === "firebase") {
+          const email = credentials.email?.toLowerCase().trim();
+          const name = (credentials as any).name || "Business Owner";
+
+          if (!email) {
+            throw new Error("Email zaroori hai");
+          }
+
+          let user = await db.user.findUnique({
+            where: { email },
+            include: { businesses: true },
+          });
+
+          if (!user) {
+            user = await db.user.create({
+              data: {
+                email,
+                fullName: name,
+                businesses: {
+                  create: {
+                    businessName: `${name}'s Business`,
+                    category: "clinic",
+                    defaultTone: "friendly",
+                    subscriptions: {
+                      create: {
+                        planName: "starter_499",
+                        status: "active",
+                        monthlyAiReplyLimit: 100,
+                        aiRepliesUsed: 0,
+                      },
+                    },
+                  },
+                },
+              },
+              include: { businesses: true },
+            });
+          }
+
+          const primaryBusiness = user.businesses[0] || null;
+
+          return {
+            id: user.id,
+            name: user.fullName,
+            email: user.email,
+            phone: user.phoneNumber,
+            businessId: primaryBusiness?.id || null,
+            businessName: primaryBusiness?.businessName || null,
+          };
+        }
+
         return null;
       },
     }),

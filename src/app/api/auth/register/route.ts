@@ -6,14 +6,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { fullName, phone, email, password, businessName, category } = body;
 
-    const rawPhone = phone?.replace(/\D/g, "");
-    if (!rawPhone || rawPhone.length < 10) {
+    const cleanEmail = email?.toLowerCase().trim();
+    if (!cleanEmail || !password) {
       return NextResponse.json(
-        { error: "Kripya 10-digit mobile number enter karein" },
+        { error: "Valid email address aur password zaroori hain" },
         { status: 400 }
       );
     }
-    const cleanPhone = rawPhone.slice(-10);
 
     if (!fullName || !businessName) {
       return NextResponse.json(
@@ -22,14 +21,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const rawPhone = phone?.replace(/\D/g, "");
+    const cleanPhone = rawPhone && rawPhone.length >= 10 ? rawPhone.slice(-10) : null;
+
     // Check if user already exists
     const existing = await db.user.findUnique({
-      where: { phoneNumber: cleanPhone },
+      where: { email: cleanEmail },
     });
 
     if (existing) {
       return NextResponse.json(
-        { error: "Yeh mobile number already registered hai. Kripya login karein." },
+        { error: "Yeh email already registered hai. Kripya login karein." },
         { status: 400 }
       );
     }
@@ -38,9 +40,9 @@ export async function POST(req: NextRequest) {
     const user = await db.user.create({
       data: {
         fullName: fullName.trim(),
+        email: cleanEmail,
         phoneNumber: cleanPhone,
-        email: email?.trim() || null,
-        passwordHash: password || "otp-login",
+        passwordHash: password,
         businesses: {
           create: {
             businessName: businessName.trim(),
