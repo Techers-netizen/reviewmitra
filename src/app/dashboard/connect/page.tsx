@@ -33,6 +33,8 @@ export default function ConnectPlatformsPage() {
   const [justdial, setJustdial] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   const [indiamart, setIndiamart] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   
+  const [googleMapsInput, setGoogleMapsInput] = useState("");
+  const [googleMapsLoading, setGoogleMapsLoading] = useState(false);
   const [justdialUrl, setJustdialUrl] = useState("");
   const [justdialLoading, setJustdialLoading] = useState(false);
   const [imApiKey, setImApiKey] = useState("");
@@ -140,6 +142,39 @@ export default function ConnectPlatformsPage() {
       setNotification({ type: "error", message: "Failed to connect to review sync service." });
     } finally {
       setSyncingPlatform(null);
+    }
+  };
+
+  // Instant Google Maps / Places Sync (Zero GBP quota needed)
+  const handleGooglePlacesSync = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleMapsInput.trim()) return;
+    setGoogleMapsLoading(true);
+    try {
+      const res = await fetch("/api/connect/google/places-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ googleMapsUrl: googleMapsInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNotification({
+          type: "success",
+          message: data.message || "Google reviews successfully synced!",
+        });
+        setGoogleMapsInput("");
+        await fetchStatus();
+      } else {
+        setNotification({
+          type: "error",
+          message: data.error || "Failed to sync Google reviews.",
+        });
+      }
+    } catch (err: any) {
+      console.error("Google Places sync error:", err);
+      setNotification({ type: "error", message: "Failed to connect to Google Places sync." });
+    } finally {
+      setGoogleMapsLoading(false);
     }
   };
 
@@ -306,6 +341,35 @@ export default function ConnectPlatformsPage() {
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* Quick Instant Google Maps Sync (No GBP quota required) */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                <Zap size={13} className="text-amber-500" />
+                Instant Google Maps Sync (Direct link se instant reviews fetch karein)
+              </p>
+              <span className="text-[11px] text-slate-400">Zero waiting for Google API quota approval</span>
+            </div>
+            <form onSubmit={handleGooglePlacesSync} className="flex flex-col sm:flex-row gap-2">
+              <Input
+                type="text"
+                placeholder="Paste Google Maps URL ya Shop Name (e.g. https://maps.app.goo.gl/... ya 'Smile Dental Mumbai')"
+                value={googleMapsInput}
+                onChange={(e) => setGoogleMapsInput(e.target.value)}
+                className="h-9 text-xs flex-1 bg-slate-50/50"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={googleMapsLoading || !googleMapsInput.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 font-semibold shrink-0 gap-1.5"
+              >
+                <RefreshCw size={12} className={googleMapsLoading ? "animate-spin" : ""} />
+                {googleMapsLoading ? "Syncing Reviews..." : "Sync Google Reviews"}
+              </Button>
+            </form>
           </div>
         </Card>
 
