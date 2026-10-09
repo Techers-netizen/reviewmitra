@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   CreditCard,
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
   Calendar,
   AlertCircle,
   FileText,
+  Lock,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,15 +20,41 @@ import { Badge } from "@/components/ui/badge";
 
 export default function BillingPage() {
   const [currentPlan, setCurrentPlan] = useState<"starter" | "growth">("starter");
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [upgrading, setUpgrading] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
-  const handleUpgrade = () => {
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("payment") === "success") {
+        setPaymentSuccess(true);
+        if (params.get("plan") === "growth") {
+          setCurrentPlan("growth");
+        }
+      }
+    }
+  }, []);
+
+  const handleSubscribe = async (plan: "starter" | "growth") => {
     setUpgrading(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/billing/dodo-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planType: plan }),
+      });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        alert(data.error || "Could not initiate payment checkout session.");
+      }
+    } catch (e) {
+      console.error("Subscription initiation error:", e);
+      alert("Failed to connect to billing service.");
+    } finally {
       setUpgrading(false);
-      setCurrentPlan("growth");
-    }, 1500);
+    }
   };
 
   return (
@@ -39,15 +66,28 @@ export default function BillingPage() {
             Subscription & Billing
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Apna active plan dekhein, AI reply quota track karein ya Growth plan me upgrade karein.
+            Manage your subscription tier, monitor AI reply quota, or upgrade your plan.
           </p>
         </div>
 
         <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 py-1 px-3 text-xs w-fit">
           <ShieldCheck size={14} className="mr-1 text-emerald-600" />
-          UPI AutoPay Protected
+          Powered by Dodo Payments (UPI & Cards)
         </Badge>
       </div>
+
+      {/* Payment Success Alert */}
+      {paymentSuccess && (
+        <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 flex items-center justify-between text-xs font-medium">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-emerald-600" />
+            <span>Payment successful! Your ReviewMitra subscription is active and refreshed.</span>
+          </div>
+          <button onClick={() => setPaymentSuccess(false)} className="underline text-xs">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ─── Current Plan & AI Quota Card ──────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -63,12 +103,12 @@ export default function BillingPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {currentPlan === "starter" ? "₹499 / month · Single Location" : "₹899 / month · Up to 2 Locations"}
+                {currentPlan === "starter" ? "₹399 / month · Single Location" : "₹799 / month · Up to 3 Locations"}
               </p>
             </div>
 
             <div className="text-right">
-              <span className="text-xs text-slate-400">Next billing date</span>
+              <span className="text-xs text-slate-400">Renews on</span>
               <p className="text-xs font-semibold text-slate-700">Nov 1, 2026</p>
             </div>
           </div>
@@ -95,7 +135,7 @@ export default function BillingPage() {
             <p className="text-[11px] text-slate-500">
               {currentPlan === "starter"
                 ? "82 AI replies remaining this billing cycle. Renews on Nov 1."
-                : "Unlimited AI replies available across all connected platforms."}
+                : "Unlimited AI replies enabled across Google, Meta, and QR channels."}
             </p>
           </div>
         </Card>
@@ -104,15 +144,16 @@ export default function BillingPage() {
         <Card className="p-5 sm:p-6 border-slate-200 space-y-3">
           <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
             <CreditCard size={15} className="text-emerald-600" />
-            Payment Method
+            Payment Gateway
           </h4>
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
-            <p className="font-semibold text-slate-800">Google Pay / PhonePe UPI</p>
-            <p className="text-slate-500 text-[11px] font-mono">dr.rajesh@okhdfcbank</p>
+            <p className="font-semibold text-slate-800">Dodo Payments Hosted</p>
+            <p className="text-slate-500 text-[11px]">UPI AutoPay, Rupay, Visa, NetBanking</p>
           </div>
-          <p className="text-[11px] text-slate-400">
-            UPI AutoPay via Razorpay. Kabhi bhi 1-click me cancel kar sakte hain.
-          </p>
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 pt-1">
+            <Lock size={12} className="text-emerald-600" />
+            <span>Cancel anytime from your account settings.</span>
+          </div>
         </Card>
       </div>
 
@@ -123,10 +164,10 @@ export default function BillingPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-600 text-white text-[10px]">Recommended Upgrade</Badge>
-                <h3 className="font-bold text-base text-slate-900">Upgrade to Growth Plan (₹899/mo)</h3>
+                <h3 className="font-bold text-base text-slate-900">Upgrade to Growth Plan (₹799/mo)</h3>
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                Unlimited AI replies, real-time 15-minute sync, multi-outlet support aur WhatsApp VIP founder support.
+                Unlimited AI replies, real-time 15-minute sync, multi-outlet support, and VIP founder WhatsApp access.
               </p>
               <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-700">
                 <li className="flex items-center gap-2">
@@ -135,25 +176,25 @@ export default function BillingPage() {
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 size={13} className="text-emerald-600" />
-                  Real-time sync (every 15 min instead of daily)
+                  Real-time sync (Google & Facebook)
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 size={13} className="text-emerald-600" />
-                  Up to 2 Business Locations / Outlets
+                  Smart In-Store QR Review Booster
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 size={13} className="text-emerald-600" />
-                  Priority WhatsApp support directly from founders
+                  Multi-location support (up to 3 outlets)
                 </li>
               </ul>
             </div>
 
             <Button
-              onClick={handleUpgrade}
+              onClick={() => handleSubscribe("growth")}
               disabled={upgrading}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-10 px-5 gap-2 shrink-0 shadow-sm"
             >
-              {upgrading ? "Upgrading..." : "Upgrade to Growth — ₹899/mo"}
+              {upgrading ? "Redirecting..." : "Upgrade to Growth — ₹799/mo"}
               <ArrowRight size={15} />
             </Button>
           </div>
@@ -169,7 +210,7 @@ export default function BillingPage() {
 
         <div className="divide-y divide-slate-100 text-xs">
           {[
-            { id: "INV-2026-001", date: "Oct 1, 2026", plan: "Starter Plan", amount: "₹499.00", status: "Paid via UPI" },
+            { id: "INV-2026-001", date: "Oct 1, 2026", plan: "Starter Plan", amount: "₹399.00", status: "Paid via Dodo Payments" },
           ].map((inv) => (
             <div key={inv.id} className="py-3 flex items-center justify-between">
               <div>

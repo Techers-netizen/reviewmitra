@@ -98,7 +98,9 @@ model Subscription {
   id                     String   @id @default(cuid())
   businessId             String
   business               Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  planName               String   // 'starter_499', 'growth_899'
+  planName               String   // 'starter_399', 'growth_799'
+  dodoSubscriptionId     String?  @unique
+  dodoPaymentId          String?
   razorpaySubscriptionId String? @unique
   status                 String   @default("active") // 'active', 'past_due', 'cancelled'
   currentPeriodEnd       DateTime?

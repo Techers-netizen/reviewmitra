@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ingestReviews } from "@/lib/sync-engine";
+import { scrapeJustdialReviews } from "@/lib/justdial-scraper";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest) {
 
     if (!url || typeof url !== "string" || !url.toLowerCase().includes("justdial.com")) {
       return NextResponse.json(
-        { error: "Kripya valid Justdial listing URL daalein (e.g. https://www.justdial.com/...)" },
+        { error: "Please enter a valid Justdial listing URL (e.g., https://www.justdial.com/...)" },
         { status: 400 }
       );
     }
@@ -25,6 +26,9 @@ export async function POST(req: NextRequest) {
     if (!business) {
       return NextResponse.json({ error: "Business account not found" }, { status: 404 });
     }
+
+    // Run scraper on the provided URL
+    const scrapeResult = await scrapeJustdialReviews(url);
 
     // Save or update Justdial connection
     const connection = await db.platformConnection.upsert({
@@ -48,33 +52,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Ingest sample initial Justdial reviews
-    await ingestReviews(business.id, "justdial", [
-      {
-        externalId: `jd_rev_${Date.now()}_1`,
-        reviewerName: "Vikram Malhotra",
-        rating: 5,
-        reviewText: "Justdial se contact kiya tha. Bahut fast response mila aur pricing reasonable thi.",
-        reviewTimestamp: new Date(),
-      },
-      {
-        externalId: `jd_rev_${Date.now()}_2`,
-        reviewerName: "Anjali Gupta",
-        rating: 4,
-        reviewText: "Good clinic and genuine guidance provided.",
-        reviewTimestamp: new Date(Date.now() - 7200000),
-      },
-    ]);
+    // Ingest any scraped reviews
+    if (scrapeResult.reviews.length > 0) {
+      await ingestReviews(business.id, "justdial", scrapeResult.reviews);
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Justdial listing connected and initial reviews synced successfully.",
+      message: `Justdial listing connected! ${scrapeResult.reviews.length} public reviews imported.`,
       connectionId: connection.id,
+      reviewsImported: scrapeResult.reviews.length,
     });
   } catch (error: any) {
     console.error("Justdial connect error:", error);
     return NextResponse.json(
-      { error: "Justdial URL connect karne me samasya aayi." },
+      { error: "Failed to connect Justdial listing. Please check the URL and try again." },
       { status: 500 }
     );
   }
