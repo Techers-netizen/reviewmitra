@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/process-reviews",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 1 * * *"
     },
     {
       "path": "/api/cron/sync-reviews",
