@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Star, Menu, X, ArrowRight, ShieldCheck, MessageCircle } from "lucide-react";
+import { Star, Menu, X, ArrowRight, ShieldCheck, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navLinks = [
@@ -149,12 +149,10 @@ export default function PublicLayout({
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="https://wa.me/919876543210?text=Hi%20ReviewMitra%20team,%20I%20need%20help"
-                    target="_blank"
-                    rel="noreferrer"
+                    href="mailto:help.opensoz@gmail.com"
                     className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition"
                   >
-                    <MessageCircle size={13} /> WhatsApp Support
+                    <Mail size={13} /> help.opensoz@gmail.com
                   </a>
                 </li>
                 <li><Link href="/login" className="hover:text-white transition">Log in</Link></li>

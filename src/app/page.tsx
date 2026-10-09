@@ -6,7 +6,7 @@ import {
   Sparkles, ShieldCheck, MessageCircle, Zap, Star, Building2,
   ArrowRight, Menu, X, Bell, CheckCircle2, Clock, TrendingUp,
   Globe, Smartphone, Bot, BarChart3, Languages, Lock,
-  Play, Quote, QrCode,
+  Play, Quote, QrCode, Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1010,19 +1010,17 @@ function SiteFooter() {
             <ul className="space-y-2 text-sm">
               <li>
                 <a
-                  href="https://wa.me/919876543210"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 transition-colors"
+                  href="mailto:help.opensoz@gmail.com"
+                  className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 transition-colors font-medium"
                 >
-                  <MessageCircle size={13} />
-                  WhatsApp Direct
+                  <Mail size={13} />
+                  help.opensoz@gmail.com
                 </a>
               </li>
               <li>
-                <a href="mailto:support@opensoz.com" className="text-slate-500 hover:text-slate-900 transition-colors">
-                  support@opensoz.com
-                </a>
+                <Link href="/contact" className="text-slate-500 hover:text-slate-900 transition-colors">
+                  Contact & Demo Form
+                </Link>
               </li>
             </ul>
           </div>
