@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   Globe,
   CheckCircle2,
@@ -27,7 +26,6 @@ interface PlatformStatus {
 }
 
 export default function ConnectPlatformsPage() {
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [businessName, setBusinessName] = useState("");
   const [google, setGoogle] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
@@ -62,16 +60,19 @@ export default function ConnectPlatformsPage() {
     fetchStatus();
 
     // Check query params for OAuth return messages
-    const success = searchParams.get("success");
-    const error = searchParams.get("error");
-    if (success === "google_connected") {
-      setNotification({ type: "success", message: "Google Business Profile connected successfully! Initial reviews synced." });
-    } else if (success === "facebook_connected") {
-      setNotification({ type: "success", message: "Facebook Page connected successfully! Recommendations synced." });
-    } else if (error) {
-      setNotification({ type: "error", message: `Connection notice: ${error.replace(/_/g, " ")}` });
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const success = searchParams.get("success");
+      const error = searchParams.get("error");
+      if (success === "google_connected") {
+        setNotification({ type: "success", message: "Google Business Profile connected successfully! Initial reviews synced." });
+      } else if (success === "facebook_connected") {
+        setNotification({ type: "success", message: "Facebook Page connected successfully! Recommendations synced." });
+      } else if (error) {
+        setNotification({ type: "error", message: `Connection notice: ${error.replace(/_/g, " ")}` });
+      }
     }
-  }, [searchParams]);
+  }, []);
 
   // Initiate real Google OAuth
   const handleConnectGoogle = () => {

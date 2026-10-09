@@ -51,3 +51,4 @@ db/*.db-journal
 
 # package lock (using npm)
 bun.lock
+.vercel
