@@ -37,9 +37,9 @@ export default function ConnectPlatformsPage() {
   const [googleMapsLoading, setGoogleMapsLoading] = useState(false);
   const [justdialUrl, setJustdialUrl] = useState("");
   const [justdialLoading, setJustdialLoading] = useState(false);
-  const [imApiKey, setImApiKey] = useState("");
-  const [imMobile, setImMobile] = useState("");
+  const [imIdentifier, setImIdentifier] = useState("");
   const [imLoading, setImLoading] = useState(false);
+
 
   const [syncingPlatform, setSyncingPlatform] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -201,21 +201,24 @@ export default function ConnectPlatformsPage() {
     }
   };
 
-  // Connect IndiaMART seller CRM
+  // Connect IndiaMART directly by Registered Mobile or Email (No complex API key needed)
   const handleIndiaMartConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!imApiKey || !imMobile) return;
+    if (!imIdentifier.trim()) return;
     setImLoading(true);
     try {
+      const isEmail = imIdentifier.includes("@");
       const res = await fetch("/api/connect/indiamart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: imApiKey, mobileNumber: imMobile }),
+        body: JSON.stringify({
+          mobileNumber: !isEmail ? imIdentifier.trim() : undefined,
+          email: isEmail ? imIdentifier.trim() : undefined,
+        }),
       });
       if (res.ok) {
-        setNotification({ type: "success", message: "IndiaMART seller CRM connected! Buyer ratings linked." });
-        setImApiKey("");
-        setImMobile("");
+        setNotification({ type: "success", message: "IndiaMART Seller account connected! B2B inquiries & ratings linked." });
+        setImIdentifier("");
         await fetchStatus();
       } else {
         const err = await res.json();
@@ -227,6 +230,7 @@ export default function ConnectPlatformsPage() {
       setImLoading(false);
     }
   };
+
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
@@ -532,26 +536,18 @@ export default function ConnectPlatformsPage() {
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Connect your IndiaMART CRM API Key and Seller Mobile to sync B2B buyer inquiries, verified ratings, and auto-dispatch instant replies.
+                    Connect your IndiaMART Seller Mobile Number or Email to sync B2B buyer inquiries, verified ratings, and auto-dispatch instant replies. Zero API setup needed.
                   </p>
                 </div>
 
                 {!indiamart.connected ? (
                   <form onSubmit={handleIndiaMartConnect} className="flex flex-col sm:flex-row gap-2 max-w-xl">
                     <Input
-                      type="password"
-                      placeholder="IndiaMART CRM API Key"
-                      value={imApiKey}
-                      onChange={(e) => setImApiKey(e.target.value)}
+                      type="text"
+                      placeholder="Seller Mobile (+91) or Registered IndiaMART Email"
+                      value={imIdentifier}
+                      onChange={(e) => setImIdentifier(e.target.value)}
                       className="text-xs h-9 flex-1"
-                      required
-                    />
-                    <Input
-                      type="tel"
-                      placeholder="Seller Mobile (+91)"
-                      value={imMobile}
-                      onChange={(e) => setImMobile(e.target.value)}
-                      className="text-xs h-9 w-36"
                       required
                     />
                     <Button

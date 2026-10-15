@@ -158,48 +158,53 @@ export default function BillingPage() {
       </div>
 
       {/* ─── Plan Comparison & Upgrade Card ─────────────────────── */}
-      {currentPlan === "starter" && (
-        <Card className="p-6 border-emerald-200 bg-gradient-to-br from-emerald-50/60 via-white to-teal-50/40 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge className="bg-emerald-600 text-white text-[10px]">Recommended Upgrade</Badge>
-                <h3 className="font-bold text-base text-slate-900">Upgrade to Growth Plan (₹799/mo)</h3>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">
-                Unlimited AI replies, real-time 15-minute sync, multi-outlet support, and VIP founder WhatsApp access.
-              </p>
-              <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-700">
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-600" />
-                  Unlimited AI Review Replies (no 100/mo cap)
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-600" />
-                  Real-time sync (Google & Facebook)
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-600" />
-                  Smart In-Store QR Review Booster
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={13} className="text-emerald-600" />
-                  Multi-location support (up to 3 outlets)
-                </li>
-              </ul>
-            </div>
-
-            <Button
-              onClick={() => handleSubscribe("growth")}
-              disabled={upgrading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-10 px-5 gap-2 shrink-0 shadow-sm"
-            >
-              {upgrading ? "Redirecting..." : "Upgrade to Growth — ₹799/mo"}
-              <ArrowRight size={15} />
-            </Button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-5 border-emerald-200 bg-gradient-to-br from-emerald-50/60 via-white to-teal-50/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm text-slate-900">Vyapar Growth</span>
+            <Badge className="bg-emerald-600 text-white text-[10px]">Most Popular</Badge>
           </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-slate-900">₹349</span>
+            <span className="text-xs text-slate-500">/month</span>
+          </div>
+          <p className="text-xs text-slate-600">
+            500 AI replies, up to 2 businesses (e.g. Pharmacy + Restaurant), multilingual agentic AI, Google Maps + Meta + IndiaMART.
+          </p>
+          <Button
+            onClick={() => handleSubscribe("growth")}
+            disabled={upgrading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 gap-1.5 shadow-xs"
+          >
+            {upgrading ? "Redirecting..." : "Upgrade to Vyapar Growth (₹349/mo)"}
+            <ArrowRight size={14} />
+          </Button>
         </Card>
-      )}
+
+        <Card className="p-5 border-slate-200 bg-white space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm text-slate-900">Bharat Pro</span>
+            <Badge variant="outline" className="text-[10px] text-slate-600">Multi-Location</Badge>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-slate-900">₹699</span>
+            <span className="text-xs text-slate-500">/month</span>
+          </div>
+          <p className="text-xs text-slate-600">
+            1,500+ AI replies, up to 5 business locations, autonomous brand voice memory, WhatsApp report digests.
+          </p>
+          <Button
+            onClick={() => handleSubscribe("growth")}
+            disabled={upgrading}
+            variant="outline"
+            className="w-full border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold text-xs h-9 gap-1.5"
+          >
+            {upgrading ? "Redirecting..." : "Upgrade to Bharat Pro (₹699/mo)"}
+            <ArrowRight size={14} />
+          </Button>
+        </Card>
+      </div>
+
 
       {/* ─── Billing History Table ──────────────────────────────── */}
       <Card className="p-5 border-slate-200 space-y-3">

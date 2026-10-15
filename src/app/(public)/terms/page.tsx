@@ -146,7 +146,8 @@ export default function TermsPage() {
               For any questions regarding these Terms of Service, please contact OpenSoz support:
             </p>
             <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/80 font-mono text-xs space-y-1">
-              <p>Email: legal@opensoz.com</p>
+              <p>Email: help.opensoz@gmail.com</p>
+
               <p>Publisher: OpenSoz Technologies (https://opensoz.com)</p>
               <p>Platform: ReviewMitra (https://reviewmitra.opensoz.com)</p>
             </div>

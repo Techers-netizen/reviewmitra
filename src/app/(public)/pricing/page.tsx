@@ -12,44 +12,63 @@ export const metadata: Metadata = {
 
 const plans = [
   {
-    name: "Starter",
-    monthly: 399,
-    yearly: 3999,
-    tagline: "Ideal for single-location shops & clinics",
+    name: "Dukaan Starter",
+    monthly: 149,
+    yearly: 1490,
+    tagline: "Sabse sasta plan for single shops, clinics & retail stores",
+    reviewLimit: "100 AI Replies / mo",
     features: [
       { text: "1 Business Location", included: true },
-      { text: "Google + Facebook + Justdial sync", included: true },
-      { text: "100 AI Replies / month", included: true },
-      { text: "Daily review auto-sync", included: true },
-      { text: "Smart in-store Review QR booster", included: true },
-      { text: "WhatsApp & email alert summaries", included: true },
-      { text: "English, Hindi & Hinglish models", included: true },
-      { text: "Custom brand voice & learning", included: false },
-      { text: "Priority developer support", included: false },
+      { text: "100 AI Reviews & Replies / month", included: true },
+      { text: "Google Maps + Justdial + IndiaMART sync", included: true },
+      { text: "Smart in-store QR Review Booster standee", included: true },
+      { text: "Negative Review Private Shield (1-3★)", included: true },
+      { text: "WhatsApp & Email Review Alert summaries", included: true },
+      { text: "Multilingual Engine (Hindi, Hinglish, English)", included: true },
+      { text: "Multi-business switcher", included: false },
     ],
     highlight: false,
     icon: Star,
   },
   {
-    name: "Growth",
-    monthly: 799,
-    yearly: 7999,
-    tagline: "For high-volume stores & multi-outlet practices",
+    name: "Vyapar Growth",
+    monthly: 349,
+    yearly: 3490,
+    tagline: "Most popular for busy restaurants, pharmacies & salons",
+    reviewLimit: "500 AI Replies / mo",
     features: [
-      { text: "Up to 2 Business Locations", included: true },
-      { text: "Google + Facebook + Justdial sync", included: true },
-      { text: "Unlimited AI Replies", included: true },
-      { text: "Real-time webhook review sync", included: true },
-      { text: "4× daily Justdial review monitoring", included: true },
-      { text: "Smart in-store Review QR booster", included: true },
-      { text: "Custom brand voice & learning memory", included: true },
-      { text: "Priority developer support", included: true },
-      { text: "Multilingual engine (10+ languages)", included: true },
+      { text: "Up to 2 Business Locations (e.g. Pharmacy + Restaurant)", included: true },
+      { text: "500 AI Reviews & Replies / month", included: true },
+      { text: "Google Maps + Facebook + IndiaMART + Justdial", included: true },
+      { text: "Agentic AI Brain (Auto Language & Script Mirroring)", included: true },
+      { text: "Full Auto-Reply Automation with delay control", included: true },
+      { text: "Smart In-Store QR Standee with Custom Google Links", included: true },
+      { text: "WhatsApp Instant Alerts on Negative Reviews", included: true },
+      { text: "Priority Support via help.opensoz@gmail.com", included: true },
     ],
     highlight: true,
     icon: Zap,
   },
+  {
+    name: "Bharat Pro",
+    monthly: 699,
+    yearly: 6990,
+    tagline: "For high-volume multi-branch businesses & wholesale traders",
+    reviewLimit: "1,500+ AI Replies / mo",
+    features: [
+      { text: "Up to 5 Business Locations", included: true },
+      { text: "1,500+ AI Reviews & Replies / month", included: true },
+      { text: "All Platform Integrations (Google, Meta, IndiaMART, Justdial)", included: true },
+      { text: "Autonomous Agentic AI Brand Manager", included: true },
+      { text: "Real-time WhatsApp Web Digest & Reports", included: true },
+      { text: "Custom Store Voice & Self-Improving Memory", included: true },
+      { text: "High-priority direct developer line", included: true },
+    ],
+    highlight: false,
+    icon: Building2,
+  },
 ];
+
 
 const faqs = [
   {
@@ -91,15 +110,15 @@ export default function PricingPage() {
             Simple, Transparent Pricing
           </h1>
           <p className="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
-            World-class reputation management and AI automation starting at just ₹399/month. No setup fees, no hidden charges.
+            World-class reputation management and AI automation starting at just ₹149/month. Sabse saste plans to genuinely support small business owners.
           </p>
         </div>
       </section>
 
       {/* Plans */}
       <section className="py-16 sm:py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="grid gap-8 lg:grid-cols-2 max-w-4xl mx-auto">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
             {plans.map((plan) => {
               const Icon = plan.icon;
               return (

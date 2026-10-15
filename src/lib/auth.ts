@@ -93,14 +93,20 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (!user) {
-            throw new Error("Is email se koi account registered nahi hai");
+            throw new Error("Is email se koi account registered nahi hai. Kripya naya account create karein.");
           }
 
-          // Simple dev check or hash comparison
-          if (user.passwordHash !== password && user.passwordHash !== "demo") {
-            // In demo mode or plain check
-            throw new Error("Galat password");
+          // Check if user account was created via Google OAuth (password not set yet)
+          if (!user.passwordHash || user.passwordHash === "google-oauth") {
+            throw new Error(
+              "Aapka account Google se linked hai! Kripya upar 'Continue with Google' button par click karke login karein, ya neeche 'Forgot password' par click karke naya password set karein."
+            );
           }
+
+          if (user.passwordHash !== password && user.passwordHash !== "demo") {
+            throw new Error("Galat password. Agar password bhool gaye hain toh 'Forgot password' use karein.");
+          }
+
 
           const primaryBusiness = user.businesses[0] || null;
 

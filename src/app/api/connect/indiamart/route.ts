@@ -6,14 +6,16 @@ import { ingestReviews } from "@/lib/sync-engine";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { businessId, apiKey, mobileNumber } = body;
+    const { businessId, apiKey, mobileNumber, email } = body;
 
-    if (!apiKey || !mobileNumber) {
+    const identifier = (mobileNumber || email || "").trim();
+    if (!identifier) {
       return NextResponse.json(
-        { error: "IndiaMART CRM API Key and Seller Mobile Number are required." },
+        { error: "IndiaMART Registered Mobile Number ya Seller Email zaroori hai." },
         { status: 400 }
       );
     }
+
 
     let business: any = null;
     if (businessId) {
@@ -27,11 +29,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Business account not found." }, { status: 404 });
     }
 
-    // Encrypt IndiaMART CRM API Key with AES-256-GCM
-    const encryptedKey = encryptToken(apiKey.trim());
+    // Encrypt token/identifier with AES-256-GCM
+    const encryptedKey = encryptToken(apiKey ? apiKey.trim() : identifier);
 
     // Upsert PlatformConnection for IndiaMART
-    const accountLabel = `IndiaMART Seller (+91 ${mobileNumber.trim()})`;
+    const accountLabel = `IndiaMART Seller (${identifier})`;
+
 
     await db.platformConnection.upsert({
       where: {

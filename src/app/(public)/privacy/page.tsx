@@ -103,7 +103,8 @@ export default function PrivacyPage() {
               If you have any questions or data requests under applicable privacy frameworks, please reach out to us directly:
             </p>
             <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/80 font-mono text-xs space-y-1">
-              <p>Email: privacy@opensoz.com</p>
+              <p>Email: help.opensoz@gmail.com</p>
+
               <p>Organization: OpenSoz Technologies (https://opensoz.com)</p>
             </div>
           </section>

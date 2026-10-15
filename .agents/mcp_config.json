@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "superprofile": {
+      "serverUrl": "https://mcp.superprofile.bio/mcp",
+      "headers": {
+        "Authorization": "Bearer irEaJ9N0mA2b6MdN--HoxUntbPpGx-ef_iC0vNoQSrI",
+        "Accept": "application/json, text/event-stream"
+      }
+    }
+  }
+}

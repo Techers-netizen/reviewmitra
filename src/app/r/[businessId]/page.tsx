@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, use } from "react";
-import { Star, CheckCircle2, MessageSquare, Send, Sparkles, AlertCircle, ArrowRight } from "lucide-react";
+import { useState, useEffect, use } from "react";
+import { Star, CheckCircle2, MessageSquare, Send, Sparkles, AlertCircle, ArrowRight, ExternalLink, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 
 export default function CustomerReviewFunnelPage({
   params,
@@ -13,6 +14,17 @@ export default function CustomerReviewFunnelPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = use(params);
+
+  const [businessInfo, setBusinessInfo] = useState<{
+    businessName: string;
+    category: string;
+    googleReviewUrl: string;
+  }>({
+    businessName: "National Medical",
+    category: "clinic",
+    googleReviewUrl: "https://www.google.com/search?q=National+medical",
+  });
+
   const [rating, setRating] = useState<number | null>(null);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
 
@@ -28,35 +40,73 @@ export default function CustomerReviewFunnelPage({
   const [submittedPrivate, setSubmittedPrivate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const tags = [
-    "Super Fast Service",
-    "Clean & Sanitized",
-    "Friendly & Caring Staff",
-    "Great Value for Money",
-    "Highly Recommended",
-  ];
+  // Load actual business info
+  useEffect(() => {
+    async function loadBiz() {
+      try {
+        const res = await fetch(`/api/qr/info?businessId=${encodeURIComponent(businessId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setBusinessInfo({
+            businessName: data.businessName || "Our Business",
+            category: data.category || "retail",
+            googleReviewUrl: data.googleReviewUrl || "https://www.google.com",
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load business details for QR:", e);
+      }
+    }
+    loadBiz();
+  }, [businessId]);
+
+  const isRestaurant = businessInfo.category === "restaurant" ||
+    businessInfo.businessName.toLowerCase().includes("lucky") ||
+    businessInfo.businessName.toLowerCase().includes("restaurant");
+
+  const tags = isRestaurant
+    ? [
+        "Delicious Taste & Food",
+        "Super Fast Service",
+        "Polite & Attentive Staff",
+        "Hygienic & Clean Seating",
+        "Great Value for Money",
+      ]
+    : [
+        "Genuine & Authentic Medicines",
+        "Quick Counter Service",
+        "Polite & Helpful Pharmacist",
+        "Fair & Reasonable Pricing",
+        "Highly Recommended",
+      ];
 
   const handleSelectStar = (stars: number) => {
     setRating(stars);
     if (stars >= 4) {
-      setGeneratedReview(
-        "Wonderful experience! The staff was incredibly welcoming and professional. Everything was seamless and quick. Highly recommend to everyone in the area!"
-      );
+      if (isRestaurant) {
+        setGeneratedReview(
+          `Bohot hi lajawab khana aur shandar service! ${businessInfo.businessName} par taste aur hygiene dono top-class hai. Highly recommended to everyone! 5 stars!`
+        );
+      } else {
+        setGeneratedReview(
+          `Bohot badhiya anubhav raha! ${businessInfo.businessName} par saari medicines time par aur sahi rate me mil gayi. Staff ka vyavhar bohot cooperative hai. 5 stars!`
+        );
+      }
     }
   };
 
   const handleTagClick = (tag: string) => {
     setSelectedTag(tag);
-    if (tag === "Super Fast Service") {
-      setGeneratedReview("Outstanding service! Extremely fast turnaround and prompt attention. Very impressed with the efficiency!");
-    } else if (tag === "Clean & Sanitized") {
-      setGeneratedReview("Impressed by the spotless hygiene and clean environment. Professional team and top-notch safety standards.");
-    } else if (tag === "Friendly & Caring Staff") {
-      setGeneratedReview("The team here is so warm, attentive, and helpful. They listened carefully and took great care of us!");
-    } else if (tag === "Great Value for Money") {
-      setGeneratedReview("Top quality service at very reasonable pricing. Completely satisfied and worth every rupee!");
+    if (tag.includes("Taste") || tag.includes("Medicines")) {
+      setGeneratedReview(`Top quality and 100% genuine experience at ${businessInfo.businessName}. Completely satisfied!`);
+    } else if (tag.includes("Fast Service")) {
+      setGeneratedReview(`Outstanding service at ${businessInfo.businessName}! Extremely fast turnaround and very courteous staff.`);
+    } else if (tag.includes("Staff") || tag.includes("Pharmacist")) {
+      setGeneratedReview(`The staff at ${businessInfo.businessName} is warm, polite, and very helpful. Best experience in the area!`);
+    } else if (tag.includes("Pricing") || tag.includes("Value")) {
+      setGeneratedReview(`Great pricing and top quality at ${businessInfo.businessName}. Worth every rupee!`);
     } else {
-      setGeneratedReview("One of the best experiences in town. Five stars for quality, courtesy, and prompt support!");
+      setGeneratedReview(`Five stars for ${businessInfo.businessName}! Highly recommended for outstanding quality and service.`);
     }
   };
 
@@ -66,9 +116,9 @@ export default function CustomerReviewFunnelPage({
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     }
-    // Deep link directly to Google Search / Maps review prompt
-    // In production, each business configures their exact g.page review shortlink
-    window.open(`https://www.google.com/search?q=${encodeURIComponent("write a review")}`, "_blank");
+    // Deep link directly to the business's actual Google Maps search/review page
+    const targetUrl = businessInfo.googleReviewUrl || `https://www.google.com/search?q=${encodeURIComponent(businessInfo.businessName + " review")}`;
+    window.open(targetUrl, "_blank");
   };
 
   const handleSubmitPrivateFeedback = async (e: React.FormEvent) => {
@@ -98,14 +148,21 @@ export default function CustomerReviewFunnelPage({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        {/* Brand header */}
+      <div className="w-full max-w-md space-y-5">
+        {/* Actual Business Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-600 text-white shadow-md font-bold">
-            <Star size={24} fill="white" strokeWidth={0} />
+          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-600 text-white shadow-md font-bold">
+            <Star size={28} fill="white" strokeWidth={0} />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">How was your experience today?</h1>
-          <p className="text-xs text-slate-500">Your genuine rating helps us improve our service daily.</p>
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+              {isRestaurant ? "Restaurant & Cafe" : "Healthcare & Pharmacy"}
+            </span>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
+              {businessInfo.businessName}
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">Rate your experience with us today</p>
+          </div>
         </div>
 
         {/* 5-Star Selection Card */}
@@ -124,7 +181,7 @@ export default function CustomerReviewFunnelPage({
                   aria-label={`${star} star`}
                 >
                   <Star
-                    size={36}
+                    size={38}
                     className={`${
                       active
                         ? "text-amber-400 fill-amber-400 drop-shadow-sm"
@@ -136,7 +193,7 @@ export default function CustomerReviewFunnelPage({
             })}
           </div>
 
-          <p className="text-xs font-medium text-slate-600">
+          <p className="text-xs font-semibold text-slate-700">
             {rating === null
               ? "Tap the stars above to rate"
               : rating === 5
@@ -149,13 +206,20 @@ export default function CustomerReviewFunnelPage({
           </p>
         </Card>
 
-        {/* FLOW A: Positive Rating (4-5 Stars) -> Direct to Google */}
+        {/* FLOW A: Positive Rating (4-5 Stars) -> Direct to Real Google Maps */}
         {rating && rating >= 4 && (
-          <Card className="p-6 border-emerald-200 bg-emerald-50/40 space-y-4 animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-2 text-emerald-800 text-xs font-semibold">
-              <Sparkles size={16} className="text-emerald-600" />
-              <span>1-Tap AI Positive Review Suggestion</span>
+          <Card className="p-6 border-emerald-300 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 space-y-4 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+              <span className="flex items-center gap-1.5">
+                <Sparkles size={16} className="text-emerald-600" />
+                1-Tap Google Review for {businessInfo.businessName}
+              </span>
+              <Badge className="bg-emerald-600 text-white text-[10px]">Google Maps</Badge>
             </div>
+
+            <p className="text-xs text-slate-600">
+              Tap a phrase below to personalize your review, then click the green button to post directly on our Google profile:
+            </p>
 
             <div className="flex flex-wrap gap-1.5">
               {tags.map((t) => (
@@ -174,19 +238,20 @@ export default function CustomerReviewFunnelPage({
               ))}
             </div>
 
-            <div className="p-3 bg-white rounded-xl border border-emerald-100 text-xs text-slate-700 leading-relaxed italic">
-              "{generatedReview}"
+            <div className="p-3 bg-white rounded-xl border border-emerald-200 text-xs text-slate-700 leading-relaxed italic shadow-inner">
+              &quot;{generatedReview}&quot;
             </div>
 
             <Button
               onClick={handleCopyToGoogle}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-11 gap-2 shadow-sm"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-12 gap-2 shadow-md shadow-emerald-600/20"
             >
-              {copied ? <CheckCircle2 size={16} /> : <ArrowRight size={16} />}
-              {copied ? "Copied! Opening Google Reviews..." : "Copy Review & Post on Google Maps"}
+              {copied ? <CheckCircle2 size={16} /> : <ExternalLink size={16} />}
+              {copied ? "Opening Google Maps..." : `Post 5★ Review on Google Maps`}
             </Button>
+
             <p className="text-[10px] text-center text-slate-500">
-              Review is automatically copied to your clipboard. Just paste and tap Post!
+              Opens our real Google Maps listing directly. Review text is already copied to your clipboard!
             </p>
           </Card>
         )}
@@ -194,12 +259,12 @@ export default function CustomerReviewFunnelPage({
         {/* FLOW B: Unhappy Rating (1-3 Stars) -> Private Feedback Shield */}
         {rating && rating <= 3 && !submittedPrivate && (
           <Card className="p-6 border-amber-200 bg-amber-50/40 space-y-4 animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-2 text-amber-900 text-xs font-semibold">
-              <AlertCircle size={16} className="text-amber-600" />
-              <span>We value your feedback. Let the manager know:</span>
+            <div className="flex items-center gap-2 text-amber-900 text-xs font-bold">
+              <ShieldCheck size={18} className="text-amber-600" />
+              <span>Private Owner Feedback for {businessInfo.businessName}</span>
             </div>
-            <p className="text-xs text-slate-600">
-              Please share what went wrong so management can address it directly.
+            <p className="text-xs text-slate-600 leading-relaxed">
+              We are sorry your experience wasn&apos;t 5-stars. Please tell the owner directly what went wrong so we can resolve it immediately.
             </p>
 
             <form onSubmit={handleSubmitPrivateFeedback} className="space-y-3">
@@ -211,13 +276,13 @@ export default function CustomerReviewFunnelPage({
               />
               <Input
                 type="tel"
-                placeholder="Phone Number for manager callback (optional)"
+                placeholder="Mobile number for callback (optional)"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="text-xs h-9 bg-white"
               />
               <Textarea
-                placeholder="How could we have made your visit better?..."
+                placeholder="Please share what happened so management can fix it..."
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
                 rows={3}
@@ -230,7 +295,7 @@ export default function CustomerReviewFunnelPage({
                 className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-10 gap-2"
               >
                 <Send size={14} />
-                {submitting ? "Sending..." : "Submit Private Feedback to Management"}
+                {submitting ? "Sending..." : "Submit Private Feedback to Owner"}
               </Button>
             </form>
           </Card>
@@ -242,14 +307,14 @@ export default function CustomerReviewFunnelPage({
             <CheckCircle2 size={32} className="mx-auto text-emerald-600" />
             <h3 className="font-bold text-sm text-slate-900">Thank you for your feedback</h3>
             <p className="text-xs text-slate-600">
-              Your feedback has been privately forwarded to the owner. We appreciate your honesty and look forward to serving you better next time.
+              Your feedback has been privately sent to {businessInfo.businessName} management. We will look into it right away.
             </p>
           </Card>
         )}
 
         <div className="text-center pt-2">
           <p className="text-[11px] text-slate-400">
-            Powered by <span className="font-semibold text-slate-600">ReviewMitra</span> · An OpenSoz Product
+            Powered by <span className="font-semibold text-slate-600">ReviewMitra</span> · Built by OpenSoz
           </p>
         </div>
       </div>

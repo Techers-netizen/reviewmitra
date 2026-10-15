@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">ReviewMitra</string>
+    <string name="nav_inbox">Inbox</string>
+    <string name="nav_qr">QR Standee</string>
+    <string name="nav_auto_reply">Auto-Reply</string>
+    <string name="nav_analytics">Analytics</string>
+    <string name="nav_settings">Settings</string>
+    <string name="error_offline">Internet connection nahi hai. Kripya apna network check karein.</string>
+</resources>

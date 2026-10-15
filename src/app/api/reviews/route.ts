@@ -1,17 +1,34 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 // GET /api/reviews — returns the unified review feed for the logged in user's business
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    const { searchParams } = new URL(req.url);
+    const requestedBizId = searchParams.get("businessId") || req.cookies.get("rm_active_business")?.value;
 
     let business: any = null;
-    if (session?.user) {
+    if (requestedBizId) {
+      business = await db.business.findUnique({
+        where: { id: requestedBizId },
+        include: {
+          reviews: {
+            orderBy: { reviewTimestamp: "desc" },
+            include: { replies: { orderBy: { createdAt: "desc" } } },
+          },
+          connections: true,
+          subscriptions: true,
+        },
+      });
+    }
+
+    if (!business && session?.user) {
       const userId = (session.user as any).id;
       const businessId = (session.user as any).businessId;
+
 
       if (businessId) {
         business = await db.business.findUnique({

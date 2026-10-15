@@ -21,6 +21,9 @@ import {
   ShieldCheck,
   CheckCircle2,
   QrCode,
+  HelpCircle,
+  PlusCircle,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,9 +45,11 @@ const navItems: NavItem[] = [
   { href: "/dashboard/qr-booster", label: "QR Booster", icon: QrCode, isNew: true },
   { href: "/dashboard/auto-reply", label: "AI Auto-Reply", icon: Bot },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/guide", label: "Help & Guide", icon: HelpCircle, isNew: true },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
 ];
+
 
 export default function DashboardLayout({
   children,

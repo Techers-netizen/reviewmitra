@@ -118,8 +118,9 @@ export default function RefundPolicyPage() {
               For questions regarding invoices, billing status, or technical support, please contact:
             </p>
             <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/80 font-mono text-xs space-y-1">
-              <p>Billing Inquiries: billing@opensoz.com</p>
-              <p>General Support: support@opensoz.com</p>
+              <p>Billing & Refund Inquiries: help.opensoz@gmail.com</p>
+              <p>General Support: help.opensoz@gmail.com</p>
+
               <p>Developer & Publisher: OpenSoz (https://opensoz.com)</p>
             </div>
           </section>

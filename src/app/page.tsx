@@ -536,184 +536,220 @@ function FeaturesGrid() {
   );
 }
 
-// ─── INTERACTIVE DEMO ───────────────────────────────────────────────
+// ─── 3D GEMINI-STYLE AGENTIC AI TYPING DEMO ─────────────────────────
 function InteractiveDemo() {
   const [activeReview, setActiveReview] = useState(0);
-  const [showReply, setShowReply] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [typingText, setTypingText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const demoReviews = [
     {
-      name: "Priya Iyer",
-      platform: "Google",
+      store: "New Lucky Restaurant",
+      name: "Mohit Verma",
+      platform: "Google Maps",
       rating: 5,
-      text: "Painless tooth extraction! The doctor explained every step before starting. Affordable and professional.",
-      sentiment: "positive",
-      reply: "Thank you so much Priya! Dr. Mehta and our entire clinical team are delighted to hear you had a comfortable and painless experience. We take pride in transparent care. Looking forward to keeping your smile bright at your next checkup! 🙂",
+      lang: "Hinglish",
+      langBadge: "🇮🇳 Hinglish Detected",
+      text: "Bhai kya zabardast Biryani aur Chai hai! Staff kaafi polite tha aur service bhi super quick thi. Mazaa aa gaya!",
+      reply: "Bahut bahut shukriya Mohit bhai! 🙏 New Lucky Restaurant ki Biryani aur Special Chai aapko pasand aayi yeh sunkar dil khush ho gaya. Agli baar family ke saath zaroor aana — aapka swagat hamesha rahega! ☕✨",
     },
     {
-      name: "Mohammed Ali",
-      platform: "Google",
-      rating: 1,
-      text: "Took appointment for 6pm, reached on time, was made to wait 1.5 hours. Very frustrating.",
-      sentiment: "negative",
-      reply: "Dear Mohammed, we sincerely apologize for the delay you experienced. A 1.5-hour wait is unacceptable, and we have adjusted our doctor buffer times to prevent this. Please call our front desk directly at +91 98765 43210 so our management can personally ensure your next appointment is seamless. 🙏",
+      store: "National Medical",
+      name: "राजेश कुमार",
+      platform: "Google Maps",
+      rating: 5,
+      lang: "Hindi",
+      langBadge: "🇮🇳 शुद्ध हिंदी (देवनागरी)",
+      text: "नेशनल मेडिकल पर सभी दवाइयां उचित मूल्य पर तुरंत मिल गईं। भैया का व्यवहार बहुत ही विनम्र और सहयोगी है।",
+      reply: "बहुत-बहुत धन्यवाद राजेश जी! 🙏 नेशनल मेडिकल पर आपका विश्वास ही हमारी सबसे बड़ी पूंजी है। हम हमेशा शुद्ध दवाइयाँ और सही सलाह देने के लिए प्रतिबद्ध हैं। आपके और आपके परिवार के उत्तम स्वास्थ्य की कामना करते हैं। 🌿",
     },
     {
-      name: "Kavita Reddy",
-      platform: "Facebook",
-      rating: 5,
-      text: "Best dental clinic! Got teeth whitening done — absolutely loved the sparkling result.",
-      sentiment: "positive",
-      reply: "Thank you so much Kavita! 😊 We are thrilled that you loved the whitening results. Keep sharing your confident smile with family and friends — we look forward to welcoming you back! 🦷✨",
+      store: "New Lucky Restaurant",
+      name: "Sarah Jenkins",
+      platform: "Google Maps",
+      rating: 4,
+      lang: "English",
+      langBadge: "🇬🇧 English Detected",
+      text: "Loved the authentic flavours and aromatic spices! The seating was slightly crowded on Sunday evening, but the staff managed it well.",
+      reply: "Thank you so much Sarah! 😊 We are delighted that you enjoyed our authentic spices and heritage recipes. Sunday evenings get quite lively, and we appreciate your patience. We look forward to hosting you again for another memorable meal!",
     },
   ];
 
-  const handleGenerate = () => {
-    setShowReply(false);
-    setGenerating(true);
-    setTimeout(() => {
-      setGenerating(false);
-      setShowReply(true);
-    }, 1200);
+  const review = demoReviews[activeReview];
+
+  // Typewriter effect
+  const startTypewriter = (targetText: string) => {
+    if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+    setTypingText("");
+    setIsTyping(true);
+    setIsPublished(false);
+
+    let index = 0;
+    typingTimerRef.current = setInterval(() => {
+      if (index < targetText.length) {
+        setTypingText((prev) => prev + targetText.charAt(index));
+        index++;
+      } else {
+        if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+        setIsTyping(false);
+        setIsPublished(true);
+      }
+    }, 18);
   };
 
   useEffect(() => {
-    setShowReply(false);
-    setGenerating(false);
+    startTypewriter(review.reply);
+    return () => {
+      if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+    };
   }, [activeReview]);
 
-  const review = demoReviews[activeReview];
-
   return (
-    <section id="demo" className="py-16 sm:py-24 bg-white">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+    <section id="demo" className="py-20 sm:py-28 bg-gradient-to-b from-white via-slate-50 to-white relative overflow-hidden">
+      {/* Background glow orb */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-gradient-to-tr from-emerald-400/15 via-teal-400/10 to-sky-400/15 blur-3xl pointer-events-none rounded-full" />
+
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 relative z-10">
         <FadeUp>
           <div className="text-center max-w-2xl mx-auto">
-            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-              <Play size={12} className="mr-1.5" />
-              Live Demonstration
+            <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800 gap-1.5 px-3 py-1 font-semibold">
+              <Sparkles size={13} className="text-emerald-600 animate-pulse" />
+              Agentic Gemini 2.0 Live Showcase
             </Badge>
-            <h2 className="mt-4 text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
-              Experience the AI Reply Engine
+            <h2 className="mt-4 text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+              Watch the AI Agent Type Live
             </h2>
-            <p className="mt-3 text-base text-slate-600">
-              Select a review below and click &quot;Generate AI Reply&quot;. Fully interactive — no registration required.
+            <p className="mt-3 text-sm sm:text-base text-slate-600">
+              Review aate hi Agentic AI customer ki bhasha, emotion aur dukaan ka context samajh kar real-time type karke reply publish karta hai.
             </p>
           </div>
         </FadeUp>
 
-        <FadeUp delay={0.2}>
-          <div className="mt-10 max-w-3xl mx-auto">
-            {/* Review selector pills */}
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-              {demoReviews.map((r, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveReview(i)}
-                  className={`shrink-0 flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium transition-all ${
-                    activeReview === i
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                  }`}
-                >
-                  {r.rating >= 4 ? (
-                    <span className="text-emerald-500">★{r.rating}</span>
-                  ) : (
-                    <span className="text-red-500">★{r.rating}</span>
-                  )}
-                  {r.name}
-                  <span className="text-slate-400">· {r.platform}</span>
-                </button>
-              ))}
-            </div>
+        {/* Store & Language selector tabs */}
+        <FadeUp delay={0.15}>
+          <div className="mt-8 flex justify-center gap-2 flex-wrap">
+            {demoReviews.map((r, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveReview(i)}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-300 ${
+                  activeReview === i
+                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30 scale-105"
+                    : "bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <span className="font-bold">{r.store}:</span>
+                <span className="opacity-90">{r.lang}</span>
+              </button>
+            ))}
+          </div>
+        </FadeUp>
 
-            {/* Review card */}
-            <Card className="overflow-hidden">
-              <div className="p-5 sm:p-6">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-700 font-bold text-sm">
-                    {review.name.charAt(0)}
-                  </span>
-                  <div>
-                    <p className="font-semibold text-slate-900">{review.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <div className="flex gap-0.5">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            size={13}
-                            className={i < review.rating ? (review.rating >= 4 ? "text-emerald-500" : "text-red-400") : "text-slate-200"}
-                            fill={i < review.rating ? "currentColor" : "none"}
-                            strokeWidth={i < review.rating ? 0 : 2}
-                          />
-                        ))}
+        {/* 3D Glassmorphic Interactive Console */}
+        <FadeUp delay={0.25}>
+          <div className="mt-8 max-w-3xl mx-auto">
+            <div className="relative p-[1.5px] rounded-3xl bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400 shadow-2xl shadow-emerald-500/10">
+              <div className="bg-slate-950 rounded-[23px] overflow-hidden text-slate-100 p-6 sm:p-8 space-y-6">
+                
+                {/* Top status bar */}
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="font-mono text-emerald-400 font-semibold tracking-wide">
+                      AGENTIC REVIEW AGENT · ACTIVE
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-950/40 text-[11px] font-mono">
+                    {review.langBadge}
+                  </Badge>
+                </div>
+
+                {/* Incoming Review Card */}
+                <div className="bg-slate-900/90 rounded-2xl p-4 sm:p-5 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 grid place-items-center text-slate-950 font-black text-sm">
+                        {review.name.charAt(0)}
                       </div>
-                      <Badge variant="outline" className={`text-[10px] h-5 ${
-                        review.sentiment === "positive"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-red-50 text-red-700 border-red-200"
-                      }`}>
-                        {review.sentiment === "positive" ? "Positive" : "Negative"}
-                      </Badge>
-                      <span className="text-xs text-slate-400">{review.platform}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm text-white">{review.name}</p>
+                          <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full font-mono">
+                            {review.platform}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-amber-400 mt-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star key={i} size={12} fill="currentColor" />
+                          ))}
+                          <span className="text-[11px] text-slate-400 ml-1">· For {review.store}</span>
+                        </div>
+                      </div>
                     </div>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-full border border-emerald-800/50">
+                      New Review
+                    </span>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed pl-1 italic">
+                    &quot;{review.text}&quot;
+                  </p>
+                </div>
+
+                {/* AI Agent Reasoning & Live Typing */}
+                <div className="bg-slate-900/60 rounded-2xl p-5 border border-emerald-500/30 space-y-3 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 font-semibold text-emerald-400">
+                      <Bot size={16} className="text-emerald-400" />
+                      <span>AI Owner Voice Output:</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {isTyping ? "Generating real-time..." : "Draft Complete"}
+                    </span>
+                  </div>
+
+                  {/* Real-time typing text */}
+                  <div className="min-h-[75px] font-sans text-xs sm:text-sm text-emerald-100 leading-relaxed">
+                    {typingText}
+                    {isTyping && (
+                      <span className="inline-block w-2 h-4 bg-emerald-400 ml-1 animate-pulse" />
+                    )}
+                  </div>
+
+                  {/* Auto-posted badge */}
+                  <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-800/80">
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+                      <CheckCircle2 size={13} className={isPublished ? "text-emerald-400" : "text-slate-600"} />
+                      <span>{isPublished ? "Auto-posted back to Google Maps" : "Verifying store tone & safety rules..."}</span>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => startTypewriter(review.reply)}
+                      disabled={isTyping}
+                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold gap-1.5 self-start sm:self-auto"
+                    >
+                      <Sparkles size={13} /> Replay AI Generation
+                    </Button>
                   </div>
                 </div>
 
-                <p className="mt-4 text-sm text-slate-700 leading-relaxed">{review.text}</p>
-
-                <div className="mt-4 flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleGenerate}
-                    disabled={generating}
-                    className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 shadow-sm"
-                  >
-                    <Sparkles size={14} className={generating ? "animate-spin" : ""} />
-                    {generating ? "Crafting reply..." : showReply ? "Regenerate" : "Generate AI Reply"}
-                  </Button>
-                  {!showReply && !generating && (
-                    <span className="text-xs text-slate-400">← Click to test live AI response</span>
-                  )}
-                </div>
               </div>
-
-              {/* AI Reply */}
-              <AnimatePresence>
-                {showReply && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                    className="overflow-hidden"
-                  >
-                    <div className="border-t border-emerald-200 bg-emerald-50/50 p-5 sm:p-6">
-                      <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 mb-2">
-                        <CheckCircle2 size={14} />
-                        AI-generated draft · Friendly business tone
-                      </div>
-                      <p className="text-sm text-emerald-900/80 leading-relaxed">{review.reply}</p>
-                      <div className="mt-3 flex items-center gap-2">
-                        <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 text-xs h-8">
-                          <CheckCircle2 size={12} /> Publish to Platform
-                        </Button>
-                        <span className="text-[10px] text-slate-500">Live preview — no action taken on demo</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </Card>
+            </div>
           </div>
         </FadeUp>
+
       </div>
     </section>
   );
 }
 
+
+
 // ─── TESTIMONIALS ───────────────────────────────────────────────────
+
 function TestimonialsSection() {
   const testimonials = [
     {

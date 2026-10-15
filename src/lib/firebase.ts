@@ -29,9 +29,8 @@ googleProvider.addScope("https://www.googleapis.com/auth/userinfo.profile");
 const facebookProvider = new FacebookAuthProvider();
 facebookProvider.addScope("email");
 facebookProvider.addScope("public_profile");
-facebookProvider.addScope("pages_show_list");
-facebookProvider.addScope("pages_read_engagement");
-facebookProvider.addScope("pages_manage_posts");
+// Note: Page management permissions are handled separately via Meta Business OAuth in dashboard, not during user login
+
 
 export {
   app,
