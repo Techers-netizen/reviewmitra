@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -24,6 +24,7 @@ import {
   HelpCircle,
   PlusCircle,
   Check,
+  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,9 +62,53 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const businessName = (session?.user as any)?.businessName || "My Clinic / Business";
+  const [businesses, setBusinesses] = useState<any[]>([]);
+  const [activeBiz, setActiveBiz] = useState<any>(null);
+  const [bizSwitcherOpen, setBizSwitcherOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
+
+  const defaultBizName = (session?.user as any)?.businessName || "National Medical";
+  const businessName = activeBiz?.name || defaultBizName;
   const userName = session?.user?.name || "Business Owner";
   const userPhone = (session?.user as any)?.phone || "9876543210";
+
+  useEffect(() => {
+    async function loadBusinesses() {
+      try {
+        const res = await fetch("/api/business");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.businesses && data.businesses.length > 0) {
+            setBusinesses(data.businesses);
+            const active = data.businesses.find((b: any) => b.isActive) || data.businesses[0];
+            setActiveBiz(active);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load businesses:", e);
+      }
+    }
+    loadBusinesses();
+  }, []);
+
+  const handleSwitchBusiness = async (bizId: string) => {
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/business/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId: bizId }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error("Failed to switch business:", e);
+    } finally {
+      setSwitching(false);
+      setBizSwitcherOpen(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -87,13 +132,97 @@ export default function DashboardLayout({
               </span>
             </Link>
 
+            {/* Multi-Business Switcher Dropdown */}
             <div className="hidden md:flex items-center gap-2 pl-4 border-l border-slate-200 text-xs">
-              <span className="flex items-center gap-1.5 font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">
-                <Building2 size={13} className="text-emerald-600" />
-                {businessName}
-              </span>
-              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">
-                Starter Plan
+              <div className="relative">
+                <button
+                  onClick={() => setBizSwitcherOpen(!bizSwitcherOpen)}
+                  className="flex items-center gap-2 font-medium text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors text-xs border border-slate-200 shadow-2xs"
+                >
+                  <Building2 size={14} className="text-emerald-600 shrink-0" />
+                  <span className="font-bold max-w-[150px] truncate">
+                    {activeBiz?.name || defaultBizName}
+                  </span>
+                  <ChevronDown size={12} className="text-slate-500 shrink-0" />
+                </button>
+
+                {bizSwitcherOpen && (
+                  <div
+                    className="absolute left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-3.5 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Switch Store / Clinic
+                      </p>
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
+                        Multi-Store
+                      </span>
+                    </div>
+
+                    <div className="py-1 max-h-60 overflow-y-auto">
+                      {(businesses.length > 0
+                        ? businesses
+                        : [
+                            { id: "1", name: "National Medical", category: "clinic", isActive: true },
+                            { id: "2", name: "New Lucky Restaurant", category: "restaurant", isActive: false },
+                          ]
+                      ).map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => handleSwitchBusiness(b.id)}
+                          disabled={switching}
+                          className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-slate-50 transition-colors text-xs ${
+                            b.isActive
+                              ? "bg-emerald-50/70 font-semibold text-emerald-950"
+                              : "text-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 truncate">
+                            <Store
+                              size={14}
+                              className={b.isActive ? "text-emerald-600" : "text-slate-400"}
+                            />
+                            <div className="truncate">
+                              <p className="font-semibold truncate">{b.name}</p>
+                              <p className="text-[10px] text-slate-400 capitalize">
+                                {b.category || "MSME Store"}
+                              </p>
+                            </div>
+                          </div>
+                          {b.isActive && <Check size={14} className="text-emerald-600 shrink-0 ml-2" />}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="px-2 pt-1.5 border-t border-slate-100">
+                      <button
+                        onClick={() => {
+                          const name = prompt(
+                            "Naye business ka naam enter karein (e.g. New Lucky Restaurant ya National Medical):"
+                          );
+                          if (name?.trim()) {
+                            fetch("/api/business", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ businessName: name.trim() }),
+                            }).then(() => window.location.reload());
+                          }
+                        }}
+                        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold"
+                      >
+                        <PlusCircle size={13} /> + Add Another Business
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Badge
+                variant="outline"
+                className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]"
+              >
+                Growth Plan (2 Stores)
               </Badge>
             </div>
           </div>
@@ -242,6 +371,36 @@ export default function DashboardLayout({
                 >
                   <X size={18} />
                 </button>
+              </div>
+
+              {/* Mobile Business Selector */}
+              <div className="mb-3 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+                  Active Store / Clinic
+                </p>
+                <div className="space-y-1">
+                  {(businesses.length > 0
+                    ? businesses
+                    : [
+                        { id: "1", name: "National Medical", category: "clinic", isActive: true },
+                        { id: "2", name: "New Lucky Restaurant", category: "restaurant", isActive: false },
+                      ]
+                  ).map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => handleSwitchBusiness(b.id)}
+                      disabled={switching}
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-all ${
+                        b.isActive
+                          ? "bg-emerald-600 text-white font-bold shadow-2xs"
+                          : "text-slate-700 hover:bg-slate-200 font-medium"
+                      }`}
+                    >
+                      <span className="truncate">{b.name}</span>
+                      {b.isActive && <Check size={14} className="shrink-0" />}
+                    </button>
+                  ))}
+                </div>
               </div>
               <nav className="space-y-1 flex-1 overflow-y-auto">
                 {navItems.map((item) => {

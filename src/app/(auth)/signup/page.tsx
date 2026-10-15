@@ -144,7 +144,25 @@ export default function SignupPage() {
       }
     } catch (err: any) {
       console.error("Facebook signup error:", err);
-      setError(err?.message || "Facebook signup fail hua");
+      if (err?.code === "auth/popup-blocked") {
+        setError(
+          "Browser ne popup window block kar di hai! Kripya browser me popups allow karein ya 'Continue with Google' / Email se signup karein."
+        );
+      } else if (
+        err?.code === "auth/operation-not-allowed" ||
+        err?.code === "auth/configuration-not-found" ||
+        err?.message?.includes("not enabled")
+      ) {
+        setError(
+          "Facebook Sign-In setup Firebase console me verify ho raha hai. Kripya 'Continue with Google' ya email se signup karein."
+        );
+      } else if (err?.code === "auth/popup-closed-by-user") {
+        setError("Facebook signup window band kar di gayi thi.");
+      } else {
+        setError(
+          err?.message || "Facebook signup open nahi ho saka. Kripya Google ya Email se signup karein."
+        );
+      }
       setOauthLoading(null);
     }
   };

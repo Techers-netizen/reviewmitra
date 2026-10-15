@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 // GET /api/business - List all businesses owned by logged-in user
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -12,7 +12,8 @@ export async function GET() {
     }
 
     const userId = (session.user as any).id;
-    const activeBusinessId = (session.user as any).businessId;
+    const cookieBiz = req.cookies.get("rm_active_business")?.value;
+    const activeBusinessId = cookieBiz || (session.user as any).businessId;
 
     let businesses = await db.business.findMany({
       where: { ownerId: userId },
@@ -23,22 +24,77 @@ export async function GET() {
       orderBy: { createdAt: "asc" },
     });
 
-    // If user has 0 businesses, check if user exists or create default
-    if (businesses.length === 0 && userId) {
-      const defaultBiz = await db.business.create({
-        data: {
-          ownerId: userId,
-          businessName: "National Medical",
-          category: "clinic",
-          defaultTone: "friendly",
-        },
-        include: {
-          connections: true,
-          _count: { select: { reviews: true } },
-        },
-      });
-      businesses = [defaultBiz];
+    const hasNationalMedical = businesses.some((b) =>
+      b.businessName.toLowerCase().includes("national")
+    );
+    const hasLucky = businesses.some((b) =>
+      b.businessName.toLowerCase().includes("lucky")
+    );
+
+    // Ensure user has National Medical
+    if (!hasNationalMedical && userId) {
+      try {
+        const b1 = await db.business.create({
+          data: {
+            ownerId: userId,
+            businessName: "National Medical",
+            category: "clinic",
+            defaultTone: "friendly",
+          },
+          include: {
+            connections: true,
+            _count: { select: { reviews: true } },
+          },
+        });
+        await db.platformConnection.create({
+          data: {
+            businessId: b1.id,
+            platformName: "google",
+            externalAccountId:
+              "https://www.google.com/search?q=National%20medical&shem=epsd1%2Cesd2e%2Crimspwouoe%2Csdpie&source=sh%2Fx%2Fpage%2Fhdr%2Fm1%2F1&kgs=e5dee88ce33cc248",
+            status: "connected",
+            lastSyncAt: new Date(),
+          },
+        });
+        businesses.push(b1);
+      } catch (e) {
+        console.warn("Could not auto-seed National Medical:", e);
+      }
     }
+
+    // Ensure user has New Lucky Restaurant
+    if (!hasLucky && userId) {
+      try {
+        const b2 = await db.business.create({
+          data: {
+            ownerId: userId,
+            businessName: "New Lucky Restaurant",
+            category: "restaurant",
+            defaultTone: "friendly",
+          },
+          include: {
+            connections: true,
+            _count: { select: { reviews: true } },
+          },
+        });
+        await db.platformConnection.create({
+          data: {
+            businessId: b2.id,
+            platformName: "google",
+            externalAccountId:
+              "https://www.google.com/search?q=New%20Lucky%20Restaurant&shem=epsd1%2Cesd2e%2Crimspwouoe%2Csdpie&source=sh%2Fx%2Fpage%2Fhdr%2Fm1%2F1&kgs=96a0fb19d327742f",
+            status: "connected",
+            lastSyncAt: new Date(),
+          },
+        });
+        businesses.push(b2);
+      } catch (e) {
+        console.warn("Could not auto-seed New Lucky Restaurant:", e);
+      }
+    }
+
+    const currentActiveId =
+      businesses.find((b) => b.id === activeBusinessId)?.id || businesses[0]?.id;
 
     return NextResponse.json({
       businesses: businesses.map((b) => ({
@@ -47,9 +103,9 @@ export async function GET() {
         category: b.category,
         reviewsCount: b._count.reviews,
         connectionsCount: b.connections.length,
-        isActive: b.id === activeBusinessId || businesses[0]?.id === b.id,
+        isActive: b.id === currentActiveId,
       })),
-      activeBusinessId: activeBusinessId || businesses[0]?.id,
+      activeBusinessId: currentActiveId,
     });
   } catch (error: any) {
     console.error("GET /api/business error:", error);

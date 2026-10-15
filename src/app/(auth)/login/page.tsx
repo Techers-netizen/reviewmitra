@@ -121,7 +121,25 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Facebook auth error:", err);
-      setError(err?.message || "Facebook login fail hua");
+      if (err?.code === "auth/popup-blocked") {
+        setError(
+          "Browser ne popup window block kar di hai! Kripya browser me popups allow karein ya 'Continue with Google' / Email se login karein."
+        );
+      } else if (
+        err?.code === "auth/operation-not-allowed" ||
+        err?.code === "auth/configuration-not-found" ||
+        err?.message?.includes("not enabled")
+      ) {
+        setError(
+          "Facebook Sign-In setup Firebase console me verify ho raha hai. Kripya 'Continue with Google' ya email se login karein."
+        );
+      } else if (err?.code === "auth/popup-closed-by-user") {
+        setError("Facebook login window band kar di gayi thi.");
+      } else {
+        setError(
+          err?.message || "Facebook login open nahi ho saka. Kripya Google ya Email se login karein."
+        );
+      }
       setOauthLoading(null);
     }
   };

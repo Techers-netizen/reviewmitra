@@ -15,10 +15,10 @@ export async function GET(req: NextRequest) {
   }
 
   const scopes = [
+    "public_profile",
+    "email",
     "pages_show_list",
     "pages_read_engagement",
-    "pages_manage_engagement",
-    "pages_read_user_content",
   ].join(",");
 
   const fbAuthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(
