@@ -76,8 +76,7 @@ export default function SignupPage() {
         setError(signinRes.error);
         setLoading(false);
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       setError("Registration failed. Kripya dobara try karein.");
@@ -108,8 +107,7 @@ export default function SignupPage() {
         setError(res.error);
         setOauthLoading(null);
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       console.error("Google signup error:", err);
@@ -139,8 +137,7 @@ export default function SignupPage() {
         setError(res.error);
         setOauthLoading(null);
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       console.error("Facebook signup error:", err);

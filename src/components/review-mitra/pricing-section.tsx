@@ -8,39 +8,56 @@ import { cn } from "@/lib/utils";
 
 const PLANS = [
   {
-    id: "starter_499",
-    name: "Starter",
-    monthly: 499,
-    yearly: 4999,
-    tagline: "Perfect for single-location shops",
+    id: "starter_149",
+    name: "Vyapar Starter",
+    monthly: 149,
+    yearly: 1499,
+    tagline: "Single clinic, pharmacy or shop",
     features: [
       "1 Business Location",
-      "Google + Facebook + Justdial",
+      "Google Maps + Meta + IndiaMART",
       "100 AI Replies / month",
-      "Standard daily sync",
-      "In-app WhatsApp support",
-      "English + Hinglish tones",
+      "Smart QR Standee generator",
+      "Hindi, Hinglish & English replies",
+      "WhatsApp review notifications",
     ],
     highlight: false,
     icon: Star,
   },
   {
-    id: "growth_899",
-    name: "Growth",
-    monthly: 899,
-    yearly: 8999,
-    tagline: "For growing MSMEs with multiple outlets",
+    id: "growth_349",
+    name: "Vyapar Growth",
+    monthly: 349,
+    yearly: 3499,
+    tagline: "For 2 businesses (e.g. Pharmacy + Restaurant)",
     features: [
-      "Up to 2 Business Locations",
-      "Unlimited AI Replies",
-      "Real-time webhook sync (Google + FB)",
-      "4× daily Justdial scrape",
-      "Custom Brand Tone",
-      "WhatsApp instant review alerts",
-      "Priority founder support",
+      "Up to 2 Business Outlets (Multi-Store)",
+      "500 AI Replies / month",
+      "Instant Google Places & Maps Sync",
+      "Negative Review Private Shield",
+      "Interactive Multi-Store Header Switcher",
+      "Custom brand voice & emoji tuning",
+      "Priority WhatsApp support",
     ],
     highlight: true,
     icon: Zap,
+  },
+  {
+    id: "scale_699",
+    name: "Bharat Pro",
+    monthly: 699,
+    yearly: 6999,
+    tagline: "Multi-branch retail & enterprises",
+    features: [
+      "Up to 5 Business Locations",
+      "1,500+ AI Replies / month",
+      "Auto-Reply Cron Sync",
+      "Custom QR Standee with Shop Logo",
+      "Full Sentiment & Competitor Analytics",
+      "Dedicated account manager",
+    ],
+    highlight: false,
+    icon: Building2,
   },
 ];
 
@@ -50,13 +67,13 @@ export function PricingSection() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="text-center">
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-            ₹499 se ₹999 — Bharat ke MSMEs ke liye
+            ₹149 se ₹699 — Bharat ke sabhi MSMEs ke liye
           </Badge>
           <h2 className="mt-3 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-            Transparent pricing. No setup fee. Cancel anytime.
+            Pocket-Friendly MSME Pricing. No Hidden Setup Fees.
           </h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-xl mx-auto">
-            Western tools like Birdeye / Podium charge ₹7,000–₹35,000/month. We deliver the same core value at a price a local shop owner can afford without thinking.
+            Expensive foreign software charge ₹5,000–₹15,000/month. ReviewMitra gives Indian local shops and restaurants world-class AI review management starting at just ₹149/mo.
           </p>
         </div>
 

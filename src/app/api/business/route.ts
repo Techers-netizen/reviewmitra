@@ -50,8 +50,7 @@ export async function GET(req: NextRequest) {
           data: {
             businessId: b1.id,
             platformName: "google",
-            externalAccountId:
-              "https://www.google.com/search?q=National%20medical&shem=epsd1%2Cesd2e%2Crimspwouoe%2Csdpie&source=sh%2Fx%2Fpage%2Fhdr%2Fm1%2F1&kgs=e5dee88ce33cc248",
+            externalAccountId: "https://share.google/Y6Pm8ew7QRr10jmaq",
             status: "connected",
             lastSyncAt: new Date(),
           },
@@ -81,8 +80,7 @@ export async function GET(req: NextRequest) {
           data: {
             businessId: b2.id,
             platformName: "google",
-            externalAccountId:
-              "https://www.google.com/search?q=New%20Lucky%20Restaurant&shem=epsd1%2Cesd2e%2Crimspwouoe%2Csdpie&source=sh%2Fx%2Fpage%2Fhdr%2Fm1%2F1&kgs=96a0fb19d327742f",
+            externalAccountId: "https://share.google/93PidOEMYixf3JE7u",
             status: "connected",
             lastSyncAt: new Date(),
           },

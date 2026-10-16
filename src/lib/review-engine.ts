@@ -154,23 +154,27 @@ export async function generateAiReply(
 async function generateWithProvider(systemPrompt: string, userPrompt: string): Promise<string> {
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+    const models = ["gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+    for (const model of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: [{ text: userPrompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) return text;
+        }
+      } catch (e) {
+        console.warn(`Gemini ${model} call failed, trying next candidate:`, e);
       }
-    } catch (e) {
-      console.warn("Gemini call failed, falling back to mock");
     }
   }
 

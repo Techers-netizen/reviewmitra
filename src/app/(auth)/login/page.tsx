@@ -52,8 +52,7 @@ export default function LoginPage() {
         setError(res.error);
         setLoading(false);
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       setError("Login failed. Kripya dobara try karein.");
@@ -85,8 +84,7 @@ export default function LoginPage() {
         setError(res.error);
         setOauthLoading(null);
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       console.error("Google auth error:", err);
@@ -116,8 +114,7 @@ export default function LoginPage() {
         setError(res.error);
         setOauthLoading(null);
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       console.error("Facebook auth error:", err);

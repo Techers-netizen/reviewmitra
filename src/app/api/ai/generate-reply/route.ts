@@ -83,24 +83,35 @@ async function generateWithProvider(systemPrompt: string, userPrompt: string): P
 }
 
 async function generateWithGemini(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: userPrompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
-    }),
-  });
+  const models = ["gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+  let lastError = "";
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini API error: ${res.status} — ${errText}`);
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text;
+      } else {
+        lastError = await res.text();
+      }
+    } catch (e: any) {
+      lastError = e?.message || "Unknown error";
+    }
   }
 
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  throw new Error(`Gemini API error across all candidate models: ${lastError}`);
 }
 
 async function generateWithOpenAI(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {

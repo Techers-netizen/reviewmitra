@@ -32,11 +32,12 @@ export async function GET(req: NextRequest) {
     }
 
     const googleConn = business.connections.find((c: any) => c.platformName === "google");
+    const isLucky = business.businessName.toLowerCase().includes("lucky") || business.category === "restaurant";
     const googleReviewUrl = googleConn?.externalAccountId?.startsWith("http")
       ? googleConn.externalAccountId
-      : business.businessName.toLowerCase().includes("lucky")
-      ? "https://www.google.com/search?q=New%20Lucky%20Restaurant&shem=epsd1%2Cesd2e%2Crimspwouoe%2Csdpie&source=sh%2Fx%2Fpage%2Fhdr%2Fm1%2F1&kgs=96a0fb19d327742f"
-      : "https://www.google.com/search?q=National%20medical&shem=epsd1%2Cesd2e%2Crimspwouoe%2Csdpie&source=sh%2Fx%2Fpage%2Fhdr%2Fm1%2F1&kgs=e5dee88ce33cc248";
+      : isLucky
+      ? "https://share.google/93PidOEMYixf3JE7u"
+      : "https://share.google/Y6Pm8ew7QRr10jmaq";
 
     return NextResponse.json({
       businessId: business.id,
