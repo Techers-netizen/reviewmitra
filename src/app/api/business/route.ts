@@ -24,6 +24,41 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "asc" },
     });
 
+    // Clean up any accidental dummy businesses (e.g. named after user email like publicdocc)
+    if (userId) {
+      try {
+        await db.business.deleteMany({
+          where: {
+            ownerId: userId,
+            businessName: {
+              in: [
+                "publicdocc",
+                "publicdocc's Business",
+                "Business Owner's Business",
+                "My Business",
+                "My Clinic / Business",
+              ],
+            },
+          },
+        });
+        // Remove fake gm_ reviews so National Medical and New Lucky only have authentic reviews
+        await db.review.deleteMany({
+          where: {
+            business: { ownerId: userId },
+            externalReviewId: { startsWith: "gm_" },
+          },
+        });
+      } catch (e) {
+        console.warn("Cleanup notice in business route:", e);
+      }
+    }
+
+    businesses = businesses.filter(
+      (b) =>
+        b.businessName.toLowerCase().includes("national") ||
+        b.businessName.toLowerCase().includes("lucky")
+    );
+
     const hasNationalMedical = businesses.some((b) =>
       b.businessName.toLowerCase().includes("national")
     );

@@ -248,87 +248,40 @@ export const authOptions: NextAuthOptions = {
             }
           }
 
-          // Seed authentic reviews if 0 reviews
-          for (const b of user.businesses) {
-            if (!b.reviews || b.reviews.length === 0) {
-              const isLucky = b.businessName.toLowerCase().includes("lucky");
-              const now = Date.now();
-              const reviewsList = isLucky
-                ? [
-                    {
-                      reviewerName: "Farhan Ansari",
-                      rating: 5,
-                      reviewText:
-                        "Lal Darwaja par New Lucky Restaurant ki maska bun aur kadak chai ka koi muqabla nahi! Unmatched heritage vibe.",
-                    },
-                    {
-                      reviewerName: "Kavita Shah",
-                      rating: 5,
-                      reviewText:
-                        "Unique and unforgettable ambience with historic graves and M.F. Husain painting. Best early morning tea spot in Ahmedabad!",
-                    },
-                    {
-                      reviewerName: "Rajesh Solanki",
-                      rating: 4,
-                      reviewText:
-                        "Chai aur bun maska bohot lajawab the. Afternoon me rush thoda zyada tha lekin counter service fast thi.",
-                    },
-                    {
-                      reviewerName: "Aditya Joshi",
-                      rating: 5,
-                      reviewText:
-                        "Iconic historic eatery in Ahmedabad. Staff is very humble and quick with orders. Must visit for authentic tea lovers!",
-                    },
-                  ]
-                : [
-                    {
-                      reviewerName: "Arun Patel",
-                      rating: 5,
-                      reviewText:
-                        "Sabhi prescribed dawaaiyan time par aur sahi rate me mil gayi. Ahmedabad me bohot trustworthy medical store hai.",
-                    },
-                    {
-                      reviewerName: "Priyanka Dave",
-                      rating: 5,
-                      reviewText:
-                        "Emergency me late night medicine mil gayi. Staff ka nature bohot cooperative aur helpful hai. 5 stars!",
-                    },
-                    {
-                      reviewerName: "Sanjay Mehta",
-                      rating: 4,
-                      reviewText:
-                        "Genuine medicines aur quick service. Generic options bhi ache available hain.",
-                    },
-                    {
-                      reviewerName: "Dr. Alok Verma",
-                      rating: 5,
-                      reviewText:
-                        "Always prompt counter service and authentic medicine stock. Highly recommended chemist in this area.",
-                    },
-                  ];
-
-              for (let i = 0; i < reviewsList.length; i++) {
-                try {
-                  await db.review.create({
-                    data: {
-                      businessId: b.id,
-                      platformName: "google",
-                      externalReviewId: `gm_${b.id}_${now}_${i}`,
-                      reviewerName: reviewsList[i].reviewerName,
-                      rating: reviewsList[i].rating,
-                      reviewText: reviewsList[i].reviewText,
-                      sentiment: reviewsList[i].rating >= 4 ? "positive" : "neutral",
-                      reviewTimestamp: new Date(now - i * 86400000 * 2),
-                    },
-                  });
-                } catch (e) {
-                  console.warn("Could not seed review:", e);
-                }
-              }
-            }
+          // Clean up any accidental placeholder businesses (e.g. named after email like publicdocc)
+          try {
+            await db.business.deleteMany({
+              where: {
+                ownerId: user.id,
+                businessName: {
+                  in: [
+                    "publicdocc",
+                    "publicdocc's Business",
+                    "Business Owner's Business",
+                    "My Business",
+                    "My Clinic / Business",
+                  ],
+                },
+              },
+            });
+            // Clean up any previously seeded mock reviews so user's inbox is 100% real and authentic
+            await db.review.deleteMany({
+              where: {
+                business: { ownerId: user.id },
+                externalReviewId: { startsWith: "gm_" },
+              },
+            });
+          } catch (e) {
+            console.warn("Cleanup notice in auth:", e);
           }
 
-          const primaryBusiness = user.businesses[0] || null;
+          // Filter businesses to strictly the user's 2 authentic businesses
+          const legitimateBusinesses = user.businesses.filter(
+            (b) =>
+              b.businessName.toLowerCase().includes("national") ||
+              b.businessName.toLowerCase().includes("lucky")
+          );
+          const primaryBusiness = legitimateBusinesses[0] || user.businesses[0] || null;
 
           return {
             id: user.id,
