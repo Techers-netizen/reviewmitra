@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { encryptToken } from "@/lib/crypto";
-import { ingestReviews } from "@/lib/sync-engine";
+import { fetchGoogleAccountsAndLocations, syncGoogleReviewsFromApi } from "@/lib/google-business";
 
+/**
+ * GET /api/connect/google/callback
+ * Handles Google OAuth 2.0 callback, discovers ALL Google Business locations registered
+ * on the user's Google account (e.g., 2+ businesses on the same email), creates/links each
+ * business location in PostgreSQL, and syncs real customer reviews.
+ */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -11,7 +17,6 @@ export async function GET(req: NextRequest) {
     const error = searchParams.get("error");
 
     if (error) {
-      console.warn("Google OAuth error response:", error);
       return NextResponse.redirect(
         new URL(`/dashboard/connect?error=${encodeURIComponent(error)}`, req.url)
       );
@@ -23,7 +28,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Resolve business in DB
+    // Resolve primary business & owner in DB
     let business: any = null;
     if (state && state !== "default") {
       business = await db.business.findUnique({ where: { id: state } });
@@ -49,7 +54,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 1. Real Token Exchange with Google OAuth 2.0
+    // 1. Exchange authorization code for tokens
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -74,70 +79,149 @@ export async function GET(req: NextRequest) {
     const accessToken = tokenData.access_token;
     const refreshToken = tokenData.refresh_token || "";
 
-    // 2. Fetch Google profile / userinfo
-    let accountLabel = "Google Business Account";
+    // 2. Fetch Google user email
+    let googleEmail = "";
     try {
       const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (userRes.ok) {
         const userData = await userRes.json();
-        if (userData.email) {
-          accountLabel = `${business.businessName} (${userData.email})`;
-        }
+        if (userData.email) googleEmail = userData.email;
       }
-    } catch (e) {
-      console.warn("Could not fetch userinfo, continuing with default label");
+    } catch {
+      // Continue with default label if userinfo fails
     }
 
-    // 3. Encrypt real tokens with AES-256-GCM
+    // 3. Encrypt tokens with AES-256-GCM
     const encryptedAccess = encryptToken(accessToken);
     const encryptedRefresh = refreshToken ? encryptToken(refreshToken) : null;
 
-    // 4. Upsert PlatformConnection in Neon PostgreSQL
-    await db.platformConnection.upsert({
-      where: {
-        businessId_platformName: {
+    // 4. Discover ALL Google Business locations registered under this email
+    const discovery = await fetchGoogleAccountsAndLocations(accessToken);
+    const discoveredLocations = discovery.locations || [];
+
+    if (discoveredLocations.length > 0) {
+      const ownerBusinesses = await db.business.findMany({
+        where: { ownerId: business.ownerId },
+        orderBy: { createdAt: "asc" },
+      });
+
+      for (let i = 0; i < discoveredLocations.length; i++) {
+        const loc = discoveredLocations[i];
+        const locTitle = loc.title || `${business.businessName} #${i + 1}`;
+        const locCity =
+          loc.storefrontAddress?.locality ||
+          loc.storefrontAddress?.administrativeArea ||
+          business.city ||
+          null;
+        const placeId = loc.metadata?.placeId || undefined;
+        const writeReviewUrl =
+          loc.metadata?.newReviewUri ||
+          (placeId ? `https://search.google.com/local/writereview?placeid=${placeId}` : undefined);
+
+        // Match existing business or create a new Business record for 2nd/3rd locations
+        let targetBiz =
+          ownerBusinesses.find(
+            (b) => b.businessName.toLowerCase() === locTitle.toLowerCase()
+          ) || (i === 0 ? business : null);
+
+        if (!targetBiz) {
+          targetBiz = await db.business.create({
+            data: {
+              ownerId: business.ownerId,
+              businessName: locTitle,
+              city: locCity,
+              category: business.category || "clinic",
+              googlePlaceId: placeId,
+              googleReviewUrl: writeReviewUrl,
+              defaultTone: "friendly",
+              matchReviewLanguage: true,
+              autoReplyPositive: true,
+              notifyWhatsapp: true,
+            },
+          });
+        } else {
+          targetBiz = await db.business.update({
+            where: { id: targetBiz.id },
+            data: {
+              businessName: locTitle || targetBiz.businessName,
+              city: locCity || targetBiz.city,
+              googlePlaceId: placeId || targetBiz.googlePlaceId,
+              googleReviewUrl: writeReviewUrl || targetBiz.googleReviewUrl,
+            },
+          });
+        }
+
+        const label = googleEmail ? `${locTitle} (${googleEmail})` : locTitle;
+
+        await db.platformConnection.upsert({
+          where: {
+            businessId_platformName: {
+              businessId: targetBiz.id,
+              platformName: "google",
+            },
+          },
+          update: {
+            status: "connected",
+            externalAccountId: label,
+            listingUrl: writeReviewUrl,
+            encryptedAccessToken: encryptedAccess.encryptedText,
+            encryptedRefreshToken: encryptedRefresh?.encryptedText || undefined,
+            tokenIv: encryptedAccess.iv,
+            tokenAuthTag: encryptedAccess.authTag,
+            lastSyncAt: new Date(),
+          },
+          create: {
+            businessId: targetBiz.id,
+            platformName: "google",
+            externalAccountId: label,
+            listingUrl: writeReviewUrl,
+            status: "connected",
+            encryptedAccessToken: encryptedAccess.encryptedText,
+            encryptedRefreshToken: encryptedRefresh?.encryptedText || undefined,
+            tokenIv: encryptedAccess.iv,
+            tokenAuthTag: encryptedAccess.authTag,
+            lastSyncAt: new Date(),
+          },
+        });
+
+        await syncGoogleReviewsFromApi(targetBiz.id);
+      }
+    } else {
+      // Save connection on primary business even if GBP API quota is 0 (Direct Google Maps sync handles reviews)
+      const accountLabel = googleEmail
+        ? `${business.businessName} (${googleEmail})`
+        : "Google Business Account";
+
+      await db.platformConnection.upsert({
+        where: {
+          businessId_platformName: {
+            businessId: business.id,
+            platformName: "google",
+          },
+        },
+        update: {
+          status: "connected",
+          externalAccountId: accountLabel,
+          encryptedAccessToken: encryptedAccess.encryptedText,
+          encryptedRefreshToken: encryptedRefresh?.encryptedText || undefined,
+          tokenIv: encryptedAccess.iv,
+          tokenAuthTag: encryptedRefresh?.authTag || encryptedAccess.authTag,
+          lastSyncAt: new Date(),
+        },
+        create: {
           businessId: business.id,
           platformName: "google",
+          externalAccountId: accountLabel,
+          status: "connected",
+          encryptedAccessToken: encryptedAccess.encryptedText,
+          encryptedRefreshToken: encryptedRefresh?.encryptedText || undefined,
+          tokenIv: encryptedAccess.iv,
+          tokenAuthTag: encryptedAccess.authTag,
+          lastSyncAt: new Date(),
         },
-      },
-      update: {
-        status: "connected",
-        externalAccountId: accountLabel,
-        encryptedAccessToken: encryptedAccess.encryptedText,
-        encryptedRefreshToken: encryptedRefresh?.encryptedText || undefined,
-        tokenIv: encryptedAccess.iv,
-        tokenAuthTag: encryptedAccess.authTag,
-        lastSyncAt: new Date(),
-      },
-      create: {
-        businessId: business.id,
-        platformName: "google",
-        externalAccountId: accountLabel,
-        status: "connected",
-        encryptedAccessToken: encryptedAccess.encryptedText,
-        encryptedRefreshToken: encryptedRefresh?.encryptedText || undefined,
-        tokenIv: encryptedAccess.iv,
-        tokenAuthTag: encryptedAccess.authTag,
-        lastSyncAt: new Date(),
-      },
-    });
-
-    // 5. Try syncing real reviews if Google My Business API accounts exist
-    try {
-      const accountsRes = await fetch(
-        "https://mybusinessaccountmanagement.googleapis.com/v1/accounts",
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      if (accountsRes.ok) {
-        const accountsData = await accountsRes.json();
-        console.log("Connected Google Business accounts:", accountsData);
-      }
-    } catch (err) {
-      console.log("Google Business Accounts API check completed");
+      });
     }
 
     return NextResponse.redirect(

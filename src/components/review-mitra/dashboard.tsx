@@ -4,23 +4,28 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Bell, Search, SlidersHorizontal, RefreshCw, Filter, Inbox, TrendingUp,
-  Star as StarIcon, AlertTriangle, CheckCircle2, ChevronDown,
+  Bell,
+  Search,
+  SlidersHorizontal,
+  RefreshCw,
+  Filter,
+  Inbox,
+  TrendingUp,
+  Star as StarIcon,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { StarRating } from "./star-rating";
-import { PlatformIcon, PlatformPill } from "./platform-icon";
 import { ReviewCard } from "./review-card";
 import { AiReplyDrawer } from "./ai-reply-drawer";
 import type { ReviewItem, ReviewsResponse, Tone } from "./types";
 
-type PlatformFilter = "all" | "google" | "facebook" | "justdial";
+type PlatformFilter = "all" | "google" | "facebook" | "justdial" | "indiamart" | "qr_direct";
 type SortFilter = "newest" | "lowest" | "unreplied";
 type RatingFilter = "all" | 1 | 2 | 3 | 4 | 5;
 
@@ -46,12 +51,14 @@ export function Dashboard() {
     setRefreshing(true);
     setError(null);
     try {
-      const res = await fetch("/api/reviews", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load reviews");
+      const savedBizId = typeof window !== "undefined" ? localStorage.getItem("rm_active_business_id") : null;
+      const url = savedBizId ? `/api/reviews?businessId=${encodeURIComponent(savedBizId)}` : "/api/reviews";
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to load reviews.");
       const json = await res.json();
       setData(json);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : "Failed to load reviews.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,7 +116,7 @@ export function Dashboard() {
       body: JSON.stringify({ reviewId, tone }),
     });
     const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "Failed to generate reply");
+    if (!res.ok) throw new Error(json?.error || "Failed to generate AI reply.");
     return json as { reply: string; toneUsed: Tone };
   }
 
@@ -120,47 +127,59 @@ export function Dashboard() {
       body: JSON.stringify({ reviewId, replyText, tone, generatedByAi: true }),
     });
     const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "Failed to post reply");
-    // refresh local state
+    if (!res.ok) throw new Error(json?.error || "Failed to post reply.");
     void loadReviews(true);
     toast({
-      title: json.postStatus === "copied_to_clipboard" ? "Copied to clipboard" : "Reply posted live",
-      description: json.note,
+      title: json.postStatus === "copied_to_clipboard" ? "Reply copied to clipboard" : "Reply published live",
+      description: json.note || "Your reply has been saved and published.",
     });
     return json as { ok: boolean; postStatus: string; note?: string; platform: string };
   }
 
   async function handleRefresh() {
     await loadReviews(true);
-    toast({ title: "Synced", description: "Pulled latest reviews from all platforms." });
+    toast({ title: "Inbox Synced", description: "Pulled the latest reviews across all connected platforms." });
   }
+
+  const platformLabels: Record<PlatformFilter, string> = {
+    all: "All Platforms",
+    google: "Google Maps",
+    facebook: "Facebook",
+    justdial: "Justdial",
+    indiamart: "IndiaMART",
+    qr_direct: "In-Store QR",
+  };
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-lg sm:text-xl font-bold tracking-tight">
+          <h2 className="flex items-center gap-2 text-lg sm:text-xl font-bold tracking-tight">
             {data?.business?.name || "Loading…"}
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 capitalize hidden sm:inline-flex">
               {data?.business?.category || "business"}
             </Badge>
-          </h1>
-          <p className="text-xs text-muted-foreground">Unified inbox · Google + Facebook + Justdial</p>
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Unified Inbox · Google Maps · Facebook · Justdial · IndiaMART · In-Store QR
+          </p>
         </div>
         <div className="flex items-center gap-1.5">
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="h-9 gap-1.5">
             <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             <span className="hidden sm:inline">Sync</span>
           </Button>
-          <Button size="sm" className="h-9 bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 relative">
-            <Bell size={14} />
-            <span className="hidden sm:inline">Alerts</span>
-            {stats.unreplied > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                {stats.unreplied}
-              </span>
-            )}
+          <Button size="sm" className="h-9 bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 relative" asChild>
+            <Link href="/dashboard/settings">
+              <Bell size={14} />
+              <span className="hidden sm:inline">WhatsApp Alerts</span>
+              {stats.unreplied > 0 && (
+                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {stats.unreplied}
+                </span>
+              )}
+            </Link>
           </Button>
         </div>
       </div>
@@ -185,25 +204,25 @@ export function Dashboard() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search reviewer or review text…"
+            placeholder="Search by customer name or review text…"
             className="pl-9 h-10 bg-card"
           />
         </div>
 
         {/* Platform tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto scroll-hide -mx-1 px-1">
-          {(["all", "google", "facebook", "justdial"] as const).map((p) => (
+          {(["all", "google", "facebook", "justdial", "indiamart", "qr_direct"] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPlatform(p)}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors capitalize",
+                "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                 platform === p
                   ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                   : "border-border bg-card text-muted-foreground hover:bg-muted/50"
               )}
             >
-              {p === "all" ? "All platforms" : p}
+              {platformLabels[p]}
             </button>
           ))}
         </div>
@@ -271,26 +290,26 @@ export function Dashboard() {
               Try again
             </Button>
           </Card>
-        ) : (!data || data.reviews.length === 0) ? (
+        ) : !data || data.reviews.length === 0 ? (
           <Card className="p-10 text-center space-y-3 border-dashed border-slate-200">
             <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 grid place-items-center text-slate-400">
               <Inbox size={24} />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900">Unified Inbox Khali Hai</p>
+              <p className="text-sm font-bold text-slate-900">Your Unified Inbox is Empty</p>
               <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                Aapke is account par abhi koi review sync nahi hua hai. Google Business Profile ya Facebook Page connect karke live reviews fetch karein.
+                No reviews have been synced for this business location yet. Connect Google Maps, Facebook, Justdial, or IndiaMART to import live customer reviews.
               </p>
             </div>
             <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">
-              <Link href="/dashboard/connect">Connect Platform</Link>
+              <Link href="/dashboard/connect">Connect Platforms</Link>
             </Button>
           </Card>
         ) : filtered.length === 0 ? (
           <Card className="p-8 text-center">
             <CheckCircle2 size={32} className="mx-auto text-emerald-500" />
-            <p className="mt-2 text-sm font-medium">No reviews match your filters</p>
-            <p className="text-xs text-muted-foreground">Try clearing the platform or rating filter.</p>
+            <p className="mt-2 text-sm font-medium">No reviews match your current filters</p>
+            <p className="text-xs text-muted-foreground">Try clearing the platform or star rating filter above.</p>
           </Card>
         ) : (
           filtered.map((r) => (

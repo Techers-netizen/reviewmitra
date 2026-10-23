@@ -1,12 +1,28 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { Star, CheckCircle2, MessageSquare, Send, Sparkles, AlertCircle, ArrowRight, ExternalLink, ShieldCheck } from "lucide-react";
+import {
+  Star,
+  CheckCircle2,
+  Send,
+  Sparkles,
+  AlertCircle,
+  ExternalLink,
+  ShieldCheck,
+  Building2,
+  Copy,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+
+interface PlatformLinkInfo {
+  enabled: boolean;
+  label: string;
+  reviewUrl: string | null;
+}
 
 export default function CustomerReviewFunnelPage({
   params,
@@ -14,24 +30,22 @@ export default function CustomerReviewFunnelPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = use(params);
-
-  const [businessInfo, setBusinessInfo] = useState<{
-    businessName: string;
-    category: string;
-    googleReviewUrl: string;
-  }>({
-    businessName: "National Medical",
-    category: "clinic",
-    googleReviewUrl: "https://www.google.com/search?q=National+medical",
+  const [businessName, setBusinessName] = useState("Our Business");
+  const [businessCity, setBusinessCity] = useState("");
+  const [platforms, setPlatforms] = useState<Record<string, PlatformLinkInfo>>({
+    google: { enabled: true, label: "Google Maps", reviewUrl: null },
   });
+  const [selectedPlatform, setSelectedPlatform] = useState<string>("google");
 
   const [rating, setRating] = useState<number | null>(null);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
 
   // Positive flow (4-5 stars)
+  const [customerName, setCustomerName] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("");
   const [generatedReview, setGeneratedReview] = useState<string>("");
   const [copied, setCopied] = useState<boolean>(false);
+  const [pushingPublic, setPushingPublic] = useState<boolean>(false);
 
   // Negative flow (1-3 stars)
   const [reviewerName, setReviewerName] = useState("");
@@ -40,85 +54,104 @@ export default function CustomerReviewFunnelPage({
   const [submittedPrivate, setSubmittedPrivate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load actual business info
+  const tags = [
+    "Excellent Service",
+    "Clean & Hygienic",
+    "Friendly & Helpful Staff",
+    "Great Value for Money",
+    "Highly Recommended",
+  ];
+
   useEffect(() => {
-    async function loadBiz() {
+    async function loadBusinessProfile() {
       try {
-        const res = await fetch(`/api/qr/info?businessId=${encodeURIComponent(businessId)}`);
+        const res = await fetch(`/api/qr/feedback?businessId=${encodeURIComponent(businessId)}`, {
+          cache: "no-store",
+        });
         if (res.ok) {
           const data = await res.json();
-          setBusinessInfo({
-            businessName: data.businessName || "Our Business",
-            category: data.category || "retail",
-            googleReviewUrl: data.googleReviewUrl || "https://www.google.com",
-          });
+          if (data.business) {
+            setBusinessName(data.business.businessName || "Our Business");
+            setBusinessCity(data.business.city || "");
+            if (data.business.platforms) {
+              setPlatforms(data.business.platforms);
+            }
+          }
         }
-      } catch (e) {
-        console.error("Failed to load business details for QR:", e);
+      } catch (err) {
+        console.error("Failed to load QR business details:", err);
       }
     }
-    loadBiz();
+    void loadBusinessProfile();
   }, [businessId]);
 
-  const isRestaurant = businessInfo.category === "restaurant" ||
-    businessInfo.businessName.toLowerCase().includes("lucky") ||
-    businessInfo.businessName.toLowerCase().includes("restaurant");
-
-  const tags = isRestaurant
-    ? [
-        "Delicious Taste & Food",
-        "Super Fast Service",
-        "Polite & Attentive Staff",
-        "Hygienic & Clean Seating",
-        "Great Value for Money",
-      ]
-    : [
-        "Genuine & Authentic Medicines",
-        "Quick Counter Service",
-        "Polite & Helpful Pharmacist",
-        "Fair & Reasonable Pricing",
-        "Highly Recommended",
-      ];
+  const buildSuggestedReview = (tag: string, stars: number) => {
+    const locText = businessCity ? ` in ${businessCity}` : "";
+    if (tag === "Excellent Service") {
+      return `Had an excellent experience at ${businessName}${locText}! Fast turnaround, prompt attention, and top-quality service. Highly recommended!`;
+    }
+    if (tag === "Clean & Hygienic") {
+      return `Very impressed with the spotless hygiene and professional atmosphere at ${businessName}${locText}. Great attention to detail!`;
+    }
+    if (tag === "Friendly & Helpful Staff") {
+      return `The staff at ${businessName}${locText} is extremely warm, polite, and helpful. They took great care of everything from start to finish!`;
+    }
+    if (tag === "Great Value for Money") {
+      return `Great quality and transparent pricing at ${businessName}${locText}. Completely satisfied with the experience!`;
+    }
+    return `Wonderful ${stars}-star experience at ${businessName}${locText}! Professional team, smooth service, and genuinely helpful support.`;
+  };
 
   const handleSelectStar = (stars: number) => {
     setRating(stars);
     if (stars >= 4) {
-      if (isRestaurant) {
-        setGeneratedReview(
-          `Bohot hi lajawab khana aur shandar service! ${businessInfo.businessName} par taste aur hygiene dono top-class hai. Highly recommended to everyone! 5 stars!`
-        );
-      } else {
-        setGeneratedReview(
-          `Bohot badhiya anubhav raha! ${businessInfo.businessName} par saari medicines time par aur sahi rate me mil gayi. Staff ka vyavhar bohot cooperative hai. 5 stars!`
-        );
-      }
+      const defaultTag = selectedTag || "Highly Recommended";
+      setSelectedTag(defaultTag);
+      setGeneratedReview(buildSuggestedReview(defaultTag, stars));
     }
   };
 
   const handleTagClick = (tag: string) => {
     setSelectedTag(tag);
-    if (tag.includes("Taste") || tag.includes("Medicines")) {
-      setGeneratedReview(`Top quality and 100% genuine experience at ${businessInfo.businessName}. Completely satisfied!`);
-    } else if (tag.includes("Fast Service")) {
-      setGeneratedReview(`Outstanding service at ${businessInfo.businessName}! Extremely fast turnaround and very courteous staff.`);
-    } else if (tag.includes("Staff") || tag.includes("Pharmacist")) {
-      setGeneratedReview(`The staff at ${businessInfo.businessName} is warm, polite, and very helpful. Best experience in the area!`);
-    } else if (tag.includes("Pricing") || tag.includes("Value")) {
-      setGeneratedReview(`Great pricing and top quality at ${businessInfo.businessName}. Worth every rupee!`);
-    } else {
-      setGeneratedReview(`Five stars for ${businessInfo.businessName}! Highly recommended for outstanding quality and service.`);
-    }
+    setGeneratedReview(buildSuggestedReview(tag, rating || 5));
   };
 
-  const handleCopyToGoogle = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(generatedReview);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
+  // Direct Review Push to exact Business Platform URL
+  const handleDirectReviewPush = async () => {
+    setPushingPublic(true);
+    try {
+      if (navigator.clipboard && generatedReview.trim()) {
+        await navigator.clipboard.writeText(generatedReview.trim());
+        setCopied(true);
+      }
+
+      const res = await fetch("/api/qr/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessId,
+          reviewerName: customerName.trim() || "Verified QR Customer",
+          rating: rating || 5,
+          feedbackText: generatedReview.trim(),
+          targetPlatform: selectedPlatform,
+        }),
+      });
+
+      const data = await res.json();
+      const targetUrl =
+        data.redirectUrl ||
+        platforms[selectedPlatform]?.reviewUrl ||
+        platforms.google?.reviewUrl ||
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          `${businessName} ${businessCity}`.trim()
+        )}`;
+
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error("Direct review push error:", err);
+    } finally {
+      setPushingPublic(false);
     }
-    // Deep link directly to the business's actual Google Maps search/review page
-    const targetUrl = businessInfo.googleReviewUrl || `https://www.google.com/search?q=${encodeURIComponent(businessInfo.businessName + " review")}`;
-    window.open(targetUrl, "_blank");
   };
 
   const handleSubmitPrivateFeedback = async (e: React.FormEvent) => {
@@ -131,9 +164,10 @@ export default function CustomerReviewFunnelPage({
         body: JSON.stringify({
           businessId,
           rating,
-          reviewerName,
-          customerPhone,
-          feedbackText,
+          reviewerName: reviewerName.trim() || "In-Store Customer",
+          customerPhone: customerPhone.trim(),
+          feedbackText: feedbackText.trim(),
+          targetPlatform: "qr_direct",
         }),
       });
       if (res.ok) {
@@ -146,23 +180,32 @@ export default function CustomerReviewFunnelPage({
     }
   };
 
+  const enabledPlatformKeys = Object.keys(platforms).filter(
+    (k) => platforms[k]?.enabled
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md space-y-5">
-        {/* Actual Business Header */}
+        {/* Verified Business Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-600 text-white shadow-md font-bold">
-            <Star size={28} fill="white" strokeWidth={0} />
+          <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-600 text-white shadow-md font-bold">
+            <Building2 size={24} />
           </div>
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              {isRestaurant ? "Restaurant & Cafe" : "Healthcare & Pharmacy"}
-            </span>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
-              {businessInfo.businessName}
+          <div className="flex items-center justify-center gap-1.5">
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+              {businessName}
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">Rate your experience with us today</p>
+            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] gap-1 px-2 py-0.5">
+              <ShieldCheck size={11} className="text-emerald-600" /> Verified
+            </Badge>
           </div>
+          {businessCity && (
+            <p className="text-xs font-medium text-slate-500">{businessCity}</p>
+          )}
+          <p className="text-xs text-slate-500">
+            How was your experience with <strong>{businessName}</strong> today?
+          </p>
         </div>
 
         {/* 5-Star Selection Card */}
@@ -178,7 +221,7 @@ export default function CustomerReviewFunnelPage({
                   onMouseLeave={() => setHoverRating(null)}
                   onClick={() => handleSelectStar(star)}
                   className="p-1 transition-transform hover:scale-110 focus:outline-none"
-                  aria-label={`${star} star`}
+                  aria-label={`Rate ${star} stars`}
                 >
                   <Star
                     size={38}
@@ -193,34 +236,58 @@ export default function CustomerReviewFunnelPage({
             })}
           </div>
 
-          <p className="text-xs font-semibold text-slate-700">
+          <p className="text-xs font-semibold text-slate-600">
             {rating === null
-              ? "Tap the stars above to rate"
+              ? "Tap a star above to rate your experience"
               : rating === 5
-              ? "Excellent! (5 Stars)"
+              ? "Excellent! (5 Stars) — Thank you!"
               : rating === 4
-              ? "Great! (4 Stars)"
+              ? "Great! (4 Stars) — Glad you enjoyed!"
               : rating === 3
-              ? "Average (3 Stars)"
-              : "Needs Improvement (1-2 Stars)"}
+              ? "Average (3 Stars) — Tell us how we can improve"
+              : "We apologize (1–2 Stars) — Share directly with management"}
           </p>
         </Card>
 
-        {/* FLOW A: Positive Rating (4-5 Stars) -> Direct to Real Google Maps */}
+        {/* FLOW A: Positive Rating (4-5 Stars) -> Direct Platform Review Push */}
         {rating && rating >= 4 && (
-          <Card className="p-6 border-emerald-300 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 space-y-4 shadow-sm animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
-              <span className="flex items-center gap-1.5">
-                <Sparkles size={16} className="text-emerald-600" />
-                1-Tap Google Review for {businessInfo.businessName}
+          <Card className="p-5 sm:p-6 border-emerald-200 bg-emerald-50/40 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold">
+                <Sparkles size={15} className="text-emerald-600" />
+                <span>AI Review Assistant for {businessName}</span>
+              </div>
+              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                1-Tap Direct Push
               </span>
-              <Badge className="bg-emerald-600 text-white text-[10px]">Google Maps</Badge>
             </div>
 
-            <p className="text-xs text-slate-600">
-              Tap a phrase below to personalize your review, then click the green button to post directly on our Google profile:
-            </p>
+            {/* Platform Selector (Google Maps / Facebook / Justdial / IndiaMART) */}
+            {enabledPlatformKeys.length > 1 && (
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold text-slate-700">
+                  Select Platform to Post Your Review:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {enabledPlatformKeys.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedPlatform(key)}
+                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                        selectedPlatform === key
+                          ? "border-emerald-600 bg-emerald-600 text-white shadow-xs"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span>{platforms[key].label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
+            {/* Highlight Tags */}
             <div className="flex flex-wrap gap-1.5">
               {tags.map((t) => (
                 <button
@@ -238,51 +305,84 @@ export default function CustomerReviewFunnelPage({
               ))}
             </div>
 
-            <div className="p-3 bg-white rounded-xl border border-emerald-200 text-xs text-slate-700 leading-relaxed italic shadow-inner">
-              &quot;{generatedReview}&quot;
+            <Input
+              placeholder="Your Name (optional)"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="text-xs h-9 bg-white border-emerald-200"
+            />
+
+            {/* Editable Review Box */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-600">
+                <span className="font-semibold">Your Review (Editable):</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(generatedReview);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="text-emerald-700 font-semibold flex items-center gap-1 hover:underline"
+                >
+                  <Copy size={11} /> {copied ? "Copied!" : "Copy Text"}
+                </button>
+              </div>
+              <Textarea
+                value={generatedReview}
+                onChange={(e) => setGeneratedReview(e.target.value)}
+                rows={3}
+                className="bg-white border-emerald-200 text-xs text-slate-800 leading-relaxed"
+              />
             </div>
 
             <Button
-              onClick={handleCopyToGoogle}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-12 gap-2 shadow-md shadow-emerald-600/20"
+              type="button"
+              onClick={handleDirectReviewPush}
+              disabled={pushingPublic}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-11 gap-2 shadow-sm"
             >
               {copied ? <CheckCircle2 size={16} /> : <ExternalLink size={16} />}
-              {copied ? "Opening Google Maps..." : `Post 5★ Review on Google Maps`}
+              {pushingPublic
+                ? `Opening ${platforms[selectedPlatform]?.label || "Google Maps"}...`
+                : `Copy Review & Post on ${platforms[selectedPlatform]?.label || "Google Maps"}`}
             </Button>
 
-            <p className="text-[10px] text-center text-slate-500">
-              Opens our real Google Maps listing directly. Review text is already copied to your clipboard!
+            <p className="text-[11px] text-center text-slate-600">
+              Your review is copied to your clipboard and opens <strong>{businessName}</strong> directly on{" "}
+              <strong>{platforms[selectedPlatform]?.label || "Google Maps"}</strong>.
             </p>
           </Card>
         )}
 
-        {/* FLOW B: Unhappy Rating (1-3 Stars) -> Private Feedback Shield */}
+        {/* FLOW B: Unhappy Rating (1-3 Stars) -> Private Feedback Shield (Saved as qr_direct) */}
         {rating && rating <= 3 && !submittedPrivate && (
-          <Card className="p-6 border-amber-200 bg-amber-50/40 space-y-4 animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-2 text-amber-900 text-xs font-bold">
-              <ShieldCheck size={18} className="text-amber-600" />
-              <span>Private Owner Feedback for {businessInfo.businessName}</span>
+          <Card className="p-6 border-amber-200 bg-amber-50/40 space-y-4">
+            <div className="flex items-center gap-2 text-amber-900 text-xs font-semibold">
+              <AlertCircle size={16} className="text-amber-600" />
+              <span>Direct Message to {businessName} Management</span>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              We are sorry your experience wasn&apos;t 5-stars. Please tell the owner directly what went wrong so we can resolve it immediately.
+            <p className="text-xs text-slate-600">
+              We truly value your experience. Share what went wrong below so the owner of <strong>{businessName}</strong> can resolve it for you immediately.
             </p>
 
             <form onSubmit={handleSubmitPrivateFeedback} className="space-y-3">
               <Input
-                placeholder="Your Name (optional)"
+                placeholder="Your Full Name"
                 value={reviewerName}
                 onChange={(e) => setReviewerName(e.target.value)}
                 className="text-xs h-9 bg-white"
+                required
               />
               <Input
                 type="tel"
-                placeholder="Mobile number for callback (optional)"
+                placeholder="Your Phone Number for priority callback"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="text-xs h-9 bg-white"
               />
               <Textarea
-                placeholder="Please share what happened so management can fix it..."
+                placeholder="Please tell us how we can make things right for you..."
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
                 rows={3}
@@ -295,7 +395,7 @@ export default function CustomerReviewFunnelPage({
                 className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-10 gap-2"
               >
                 <Send size={14} />
-                {submitting ? "Sending..." : "Submit Private Feedback to Owner"}
+                {submitting ? "Sending to Management..." : "Send Private Feedback to Owner"}
               </Button>
             </form>
           </Card>
@@ -303,18 +403,23 @@ export default function CustomerReviewFunnelPage({
 
         {/* Confirmation when private feedback is submitted */}
         {submittedPrivate && (
-          <Card className="p-6 border-emerald-200 bg-emerald-50 text-center space-y-3 animate-in fade-in">
+          <Card className="p-6 border-emerald-200 bg-emerald-50 text-center space-y-3">
             <CheckCircle2 size={32} className="mx-auto text-emerald-600" />
-            <h3 className="font-bold text-sm text-slate-900">Thank you for your feedback</h3>
+            <h3 className="font-bold text-sm text-slate-900">
+              Thank You for Your Feedback
+            </h3>
             <p className="text-xs text-slate-600">
-              Your feedback has been privately sent to {businessInfo.businessName} management. We will look into it right away.
+              Your message has been delivered directly to the management of <strong>{businessName}</strong> and alerted on their WhatsApp.
             </p>
           </Card>
         )}
 
         <div className="text-center pt-2">
           <p className="text-[11px] text-slate-400">
-            Powered by <span className="font-semibold text-slate-600">ReviewMitra</span> · Built by OpenSoz
+            Powered by <span className="font-semibold text-slate-600">ReviewMitra</span> · Support:{" "}
+            <a href="mailto:help.opensoz@gmail.com" className="underline">
+              help.opensoz@gmail.com
+            </a>
           </p>
         </div>
       </div>

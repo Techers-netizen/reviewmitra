@@ -5,19 +5,16 @@ import Link from "next/link";
 import {
   Star,
   MessageSquare,
-  TrendingUp,
-  Clock,
-  ArrowRight,
-  ShieldCheck,
-  CheckCircle2,
+  Zap,
   AlertTriangle,
   Sparkles,
   Bot,
   ExternalLink,
   ChevronRight,
-  Zap,
-  RefreshCw,
   PlusCircle,
+  CheckCircle2,
+  QrCode,
+  HelpCircle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +27,9 @@ export default function DashboardOverviewPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const res = await fetch("/api/reviews", { cache: "no-store" });
+      const savedBizId = typeof window !== "undefined" ? localStorage.getItem("rm_active_business_id") : null;
+      const url = savedBizId ? `/api/reviews?businessId=${encodeURIComponent(savedBizId)}` : "/api/reviews";
+      const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -43,7 +42,7 @@ export default function DashboardOverviewPage() {
   }
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   const reviews = data?.reviews || [];
@@ -59,6 +58,7 @@ export default function DashboardOverviewPage() {
 
   const googleConn = connections.find((c: any) => c.platform === "google");
   const fbConn = connections.find((c: any) => c.platform === "facebook");
+  const jdConn = connections.find((c: any) => c.platform === "justdial");
   const indiamartConn = connections.find((c: any) => c.platform === "indiamart");
 
   const hasAnyConnection = connections.some((c: any) => c.status === "connected");
@@ -69,22 +69,27 @@ export default function DashboardOverviewPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Business Overview
+            Business Overview {data?.business?.name ? `— ${data.business.name}` : ""}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Real-time review pulse across Google, Facebook, IndiaMART aur Justdial.
+            Real-time review aggregation and Agentic AI auto-replies across Google Maps, Facebook, Justdial, and IndiaMART.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-sm text-xs font-semibold">
             <Link href="/dashboard/reviews">
               <MessageSquare size={14} /> Open Unified Inbox
             </Link>
           </Button>
           <Button asChild variant="outline" className="text-xs font-semibold">
-            <Link href="/dashboard/auto-reply">
-              <Bot size={14} className="text-emerald-600 mr-1.5" /> Auto-Reply
+            <Link href="/dashboard/qr-booster">
+              <QrCode size={14} className="text-emerald-600 mr-1.5" /> QR Review Booster
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="text-xs font-semibold">
+            <Link href="/dashboard/help">
+              <HelpCircle size={14} className="text-slate-600 mr-1.5" /> Setup Guide
             </Link>
           </Button>
         </div>
@@ -99,15 +104,15 @@ export default function DashboardOverviewPage() {
             </div>
             <div>
               <h4 className="text-sm font-bold text-amber-900">
-                {negativeReviews.length} Negative Review ko aapke attention ki zaroorat hai
+                {negativeReviews.length} negative review{negativeReviews.length > 1 ? "s require" : " requires"} your attention
               </h4>
               <p className="text-xs text-amber-700 mt-0.5">
-                {negativeReviews[0].reviewerName} ne {negativeReviews[0].rating}★ diya: &quot;{negativeReviews[0].reviewText?.slice(0, 80)}...&quot;
+                {negativeReviews[0].reviewerName} left a {negativeReviews[0].rating}★ rating: &quot;{negativeReviews[0].reviewText?.slice(0, 90)}...&quot;
               </p>
             </div>
           </div>
           <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs shrink-0 font-semibold">
-            <Link href="/dashboard/reviews">Draft Review & Reply</Link>
+            <Link href="/dashboard/reviews">Review & Approve Draft</Link>
           </Button>
         </div>
       ) : !hasAnyConnection ? (
@@ -121,13 +126,13 @@ export default function DashboardOverviewPage() {
                 Welcome to ReviewMitra! Connect your business profiles
               </h4>
               <p className="text-xs text-slate-600 mt-0.5">
-                Google Business Profile ya Facebook Page connect karein taaki aapke real reviews dashboard me automatically sync ho sakein.
+                Connect your Google Maps link, Facebook Page, Justdial URL, or IndiaMART mobile/email to sync live customer reviews automatically.
               </p>
             </div>
           </div>
           <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs shrink-0 font-semibold gap-1.5">
             <Link href="/dashboard/connect">
-              <PlusCircle size={14} /> Connect Platform
+              <PlusCircle size={14} /> Connect Platforms
             </Link>
           </Button>
         </div>
@@ -147,7 +152,7 @@ export default function DashboardOverviewPage() {
               {loading ? "..." : totalReviews}
             </p>
             <p className="mt-1 text-[11px] font-medium text-slate-400">
-              {totalReviews === 0 ? "No reviews yet" : "Synced from profiles"}
+              {totalReviews === 0 ? "No reviews synced yet" : "Real customer reviews"}
             </p>
           </div>
         </Card>
@@ -216,62 +221,30 @@ export default function DashboardOverviewPage() {
           </div>
 
           <div className="space-y-3">
-            {/* Google */}
-            <div className="p-3 rounded-xl border border-blue-100 bg-blue-50/30 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-800">Google Business Profile</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {googleConn?.status === "connected" ? "Connected & Active" : "Not connected"}
-                </p>
+            {[
+              { label: "Google Business / Maps", conn: googleConn, style: "border-blue-100 bg-blue-50/30" },
+              { label: "Facebook Page", conn: fbConn, style: "border-indigo-100 bg-indigo-50/30" },
+              { label: "Justdial Listing", conn: jdConn, style: "border-orange-100 bg-orange-50/30" },
+              { label: "IndiaMART B2B", conn: indiamartConn, style: "border-amber-100 bg-amber-50/30" },
+            ].map((item) => (
+              <div key={item.label} className={`p-3 rounded-xl border ${item.style} flex items-center justify-between`}>
+                <div>
+                  <p className="text-xs font-bold text-slate-800">{item.label}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {item.conn?.status === "connected" ? "Connected & Active" : "Not connected"}
+                  </p>
+                </div>
+                {item.conn?.status === "connected" ? (
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={12} /> Active
+                  </span>
+                ) : (
+                  <Button asChild size="sm" variant="outline" className="h-7 text-[11px] font-semibold">
+                    <Link href="/dashboard/connect">Connect</Link>
+                  </Button>
+                )}
               </div>
-              {googleConn?.status === "connected" ? (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 size={12} /> Active
-                </span>
-              ) : (
-                <Button asChild size="sm" variant="outline" className="h-7 text-[11px] font-semibold">
-                  <Link href="/dashboard/connect">Connect</Link>
-                </Button>
-              )}
-            </div>
-
-            {/* Facebook */}
-            <div className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-800">Facebook Page</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {fbConn?.status === "connected" ? "Connected & Active" : "Not connected"}
-                </p>
-              </div>
-              {fbConn?.status === "connected" ? (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 size={12} /> Active
-                </span>
-              ) : (
-                <Button asChild size="sm" variant="outline" className="h-7 text-[11px] font-semibold">
-                  <Link href="/dashboard/connect">Connect</Link>
-                </Button>
-              )}
-            </div>
-
-            {/* IndiaMART */}
-            <div className="p-3 rounded-xl border border-amber-100 bg-amber-50/30 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-800">IndiaMART B2B</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {indiamartConn?.status === "connected" ? "Connected & Active" : "Not connected"}
-                </p>
-              </div>
-              {indiamartConn?.status === "connected" ? (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 size={12} /> Active
-                </span>
-              ) : (
-                <Button asChild size="sm" variant="outline" className="h-7 text-[11px] font-semibold">
-                  <Link href="/dashboard/connect">Connect</Link>
-                </Button>
-              )}
-            </div>
+            ))}
           </div>
 
           <div className="pt-2">
@@ -287,8 +260,8 @@ export default function DashboardOverviewPage() {
         <Card className="p-5 border-slate-200 lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between border-b pb-3 border-slate-100">
             <div>
-              <h3 className="font-bold text-sm text-slate-900">Live Review & AI Feed</h3>
-              <p className="text-[11px] text-slate-500">Real-time status updates of reviews and AI actions</p>
+              <h3 className="font-bold text-sm text-slate-900">Live Review & Agentic AI Feed</h3>
+              <p className="text-[11px] text-slate-500">Real-time customer feedback and same-language AI responses</p>
             </div>
             {totalReviews > 0 && (
               <Button asChild variant="ghost" size="sm" className="text-xs text-emerald-700 font-semibold gap-1">
@@ -304,13 +277,13 @@ export default function DashboardOverviewPage() {
               <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 grid place-items-center text-slate-400">
                 <MessageSquare size={22} />
               </div>
-              <h4 className="text-sm font-bold text-slate-800">Abhi koi review sync nahi hua hai</h4>
+              <h4 className="text-sm font-bold text-slate-800">No reviews have been synced yet</h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Jaise hi aap Google Business ya Facebook connect karenge, aapke live reviews automatically yahan dikhne lagenge aur AI reply draft tayyar karega.
+                Connect your Google Maps link, Facebook Page, Justdial listing, or IndiaMART profile to pull live reviews and start automated AI replies.
               </p>
               <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5">
                 <Link href="/dashboard/connect">
-                  <PlusCircle size={13} /> Connect Google / Facebook
+                  <PlusCircle size={13} /> Connect Platforms
                 </Link>
               </Button>
             </div>
@@ -319,20 +292,22 @@ export default function DashboardOverviewPage() {
               {reviews.slice(0, 5).map((r: any) => (
                 <div key={r.id} className="py-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className={`grid h-9 w-9 place-items-center rounded-xl font-bold text-xs shrink-0 ${
-                      r.rating <= 2 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
-                    }`}>
+                    <div
+                      className={`grid h-9 w-9 place-items-center rounded-xl font-bold text-xs shrink-0 ${
+                        r.rating <= 2 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
                       {r.rating}★
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-bold text-slate-900">{r.reviewerName}</p>
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200">
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200 uppercase">
                           {r.platform}
                         </Badge>
                       </div>
                       <p className="text-xs text-slate-600 mt-0.5 line-clamp-1">
-                        {r.reviewText || "No text provided"}
+                        {r.reviewText || "Rating submitted without comment"}
                       </p>
                     </div>
                   </div>
@@ -346,11 +321,13 @@ export default function DashboardOverviewPage() {
 
           <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-emerald-900 font-medium">
-              <Sparkles size={15} className="text-emerald-600" />
-              <span>AI Reply Engine is configured to <strong>Friendly Hinglish</strong> tone</span>
+              <Bot size={15} className="text-emerald-600" />
+              <span>
+                Single-Key Gemini Agentic AI is active · <strong>Auto-matches customer review language</strong>
+              </span>
             </div>
             <Link href="/dashboard/auto-reply" className="text-xs font-bold text-emerald-700 hover:underline shrink-0">
-              Customize
+              Configure
             </Link>
           </div>
         </Card>

@@ -3,7 +3,7 @@ import { Dashboard } from "@/components/review-mitra/dashboard";
 
 export const metadata: Metadata = {
   title: "Unified Review Inbox — ReviewMitra",
-  description: "View, filter and reply to all reviews from Google, Facebook, and Justdial in one place.",
+  description: "View, filter, and reply to all customer reviews from Google Maps, Facebook, Justdial, IndiaMART, and In-Store QR in one place.",
 };
 
 export default function UnifiedInboxPage() {
@@ -14,7 +14,7 @@ export default function UnifiedInboxPage() {
           Unified Review Inbox
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-          Google, Facebook aur Justdial ke reviews ek jagah. AI se 1-click reply karein.
+          Manage all customer reviews across Google Maps, Facebook, Justdial, IndiaMART, and In-Store QR with 1-click Agentic AI replies.
         </p>
       </div>
 
