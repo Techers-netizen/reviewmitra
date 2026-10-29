@@ -57,10 +57,15 @@ export default function QrBoosterPage() {
     void loadInfo();
   }, []);
 
-  const qrLandingUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/r/${businessId}`
-      : `https://reviewmitra.opensoz.com/r/${businessId}`;
+  const [origin, setOrigin] = useState("https://reviewmitra.opensoz.com");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
+  }, []);
+
+  const qrLandingUrl = `${origin}/r/${businessId}`;
 
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(
     qrLandingUrl
