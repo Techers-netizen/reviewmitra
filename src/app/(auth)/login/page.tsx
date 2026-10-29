@@ -92,9 +92,13 @@ export default function LoginPage() {
       // Check Firebase email verification status if account exists in Firebase Auth
       let firebaseVerified = false;
       try {
-        const fbCred = await signInWithEmailAndPassword(auth, email.trim(), password);
-        await fbCred.user.reload();
-        firebaseVerified = fbCred.user.emailVerified;
+        const fbPromise = signInWithEmailAndPassword(auth, email.trim(), password);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("FB_TIMEOUT")), 2500));
+        const fbCred = (await Promise.race([fbPromise, timeoutPromise])) as any;
+        if (fbCred?.user) {
+          await fbCred.user.reload();
+          firebaseVerified = fbCred.user.emailVerified;
+        }
       } catch {
         // Continue to NextAuth DB check (handles Google-first accounts or DB-only accounts)
       }
@@ -118,16 +122,18 @@ export default function LoginPage() {
           setError(
             "Your email address is not verified yet. Please check your email inbox for the verification link or click 'Resend Verification Email' below."
           );
+        } else if (res.error === "CredentialsSignin" || res.error.includes("CredentialsSignin")) {
+          setError("Incorrect password. Please try again or reset your password.");
         } else {
           setError(res.error);
         }
-        setLoading(false);
       } else {
         router.push("/dashboard");
         router.refresh();
       }
     } catch (err: any) {
       setError("Login failed. Please check your credentials and try again.");
+    } finally {
       setLoading(false);
     }
   };

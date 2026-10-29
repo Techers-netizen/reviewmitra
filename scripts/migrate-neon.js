@@ -88,7 +88,40 @@ const statements = [
     "aiRepliesUsed" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`
+  )`,
+
+  // Safe schema updates for ReviewMitra 0.3.0
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "authProvider" TEXT DEFAULT 'email'`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN DEFAULT false`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verificationToken" TEXT`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verificationTokenExpiry" TIMESTAMP(3)`,
+  `ALTER TABLE "User" ALTER COLUMN "phoneNumber" DROP NOT NULL`,
+  `ALTER TABLE "User" ALTER COLUMN "passwordHash" DROP NOT NULL`,
+
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "city" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "googlePlaceId" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "googleReviewUrl" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "facebookPageUrl" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "justdialUrl" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "indiamartUrl" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "indiamartMobile" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "indiamartEmail" TEXT`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "matchReviewLanguage" BOOLEAN DEFAULT true`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "dailyDigestEnabled" BOOLEAN DEFAULT true`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "openwaStatus" TEXT DEFAULT 'disconnected'`,
+  `ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "openwaSessionData" TEXT`,
+
+  `ALTER TABLE "PlatformConnection" ADD COLUMN IF NOT EXISTS "listingUrl" TEXT`,
+
+  `ALTER TABLE "Review" ADD COLUMN IF NOT EXISTS "customerPhone" TEXT`,
+  `ALTER TABLE "Review" ADD COLUMN IF NOT EXISTS "detectedLanguage" TEXT DEFAULT 'en'`,
+
+  `ALTER TABLE "ReviewReply" ADD COLUMN IF NOT EXISTS "languageUsed" TEXT`,
+
+  `ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "dodoSubscriptionId" TEXT`,
+  `ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "dodoPaymentId" TEXT`,
+  `ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "taxExclusive" BOOLEAN DEFAULT true`,
+  `ALTER TABLE "Subscription" ADD COLUMN IF NOT EXISTS "maxBusinesses" INTEGER DEFAULT 1`
 ];
 
 function runQuery(sql) {

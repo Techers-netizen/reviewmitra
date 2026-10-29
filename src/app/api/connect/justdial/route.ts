@@ -8,9 +8,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { businessId, url } = body;
 
-    if (!url || typeof url !== "string" || !url.toLowerCase().includes("justdial.com")) {
+    const cleanUrl = typeof url === "string" ? url.trim() : "";
+    if (!cleanUrl || (!cleanUrl.toLowerCase().includes("justdial.com") && !cleanUrl.toLowerCase().includes("jsdl.in"))) {
       return NextResponse.json(
-        { error: "Please enter a valid Justdial listing URL (e.g., https://www.justdial.com/...)" },
+        { error: "Please enter a valid Justdial listing URL (e.g., https://www.justdial.com/... or https://jsdl.in/...)" },
         { status: 400 }
       );
     }
