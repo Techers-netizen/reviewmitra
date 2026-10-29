@@ -22,6 +22,11 @@ node_modules
 .DS_Store
 *.pem
 Thumbs.db
+desktop.ini
+**/desktop.ini
+*.zip
+_backup_old/
+test_sym/
 
 # debug
 npm-debug.log*

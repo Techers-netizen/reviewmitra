@@ -3,20 +3,18 @@ import { decryptToken } from "@/lib/crypto";
 import { ingestReviews, RawReviewPayload } from "@/lib/sync-engine";
 
 /**
- * Service to interact with Meta Graph API (v21.0):
- * - Page Recommendations/Ratings Fetching
- * - Page Comment Replies on Reviews
+ * Service for Facebook Page Recommendations & Reviews:
+ * Supports both Direct Public Facebook Page URL Scraping (no Meta App Review required)
+ * and official Meta Graph API (when Page Access Token is configured).
  */
 
 interface MetaTokenResult {
   pageAccessToken: string;
   pageId?: string;
+  listingUrl?: string;
   error?: string;
 }
 
-/**
- * Retrieves the decrypted Facebook Page Access Token for a business.
- */
 export async function getValidMetaToken(businessId: string): Promise<MetaTokenResult> {
   const connection = await db.platformConnection.findUnique({
     where: {
@@ -27,8 +25,16 @@ export async function getValidMetaToken(businessId: string): Promise<MetaTokenRe
     },
   });
 
-  if (!connection || !connection.encryptedAccessToken || !connection.tokenIv || !connection.tokenAuthTag) {
-    return { pageAccessToken: "", error: "Facebook Page not connected" };
+  if (!connection) {
+    return { pageAccessToken: "", error: "Facebook Page is not connected." };
+  }
+
+  if (!connection.encryptedAccessToken || !connection.tokenIv || !connection.tokenAuthTag) {
+    return {
+      pageAccessToken: "",
+      listingUrl: connection.listingUrl || connection.externalAccountId || undefined,
+      error: "Connected via Public Page URL (No OAuth token required).",
+    };
   }
 
   try {
@@ -38,7 +44,6 @@ export async function getValidMetaToken(businessId: string): Promise<MetaTokenRe
       connection.tokenAuthTag
     );
 
-    // Extract pageId from externalAccountId if stored like "Page Name (ID: 123456)"
     let pageId = "";
     if (connection.externalAccountId) {
       const match = connection.externalAccountId.match(/ID:\s*([a-zA-Z0-9_-]+)/);
@@ -50,22 +55,115 @@ export async function getValidMetaToken(businessId: string): Promise<MetaTokenRe
     return {
       pageAccessToken,
       pageId: pageId || undefined,
+      listingUrl: connection.listingUrl || undefined,
     };
-  } catch (err) {
-    return { pageAccessToken: "", error: "Failed to decrypt Facebook Page token" };
+  } catch {
+    return {
+      pageAccessToken: "",
+      listingUrl: connection.listingUrl || undefined,
+      error: "Failed to decrypt Facebook Page token.",
+    };
   }
 }
 
 /**
- * Fetches real recommendations and customer reviews from Facebook Page.
+ * Scrapes public recommendations/reviews from a Facebook Page URL (`/reviews`)
+ * using embedded Schema.org JSON-LD and OpenGraph metadata without requiring Meta OAuth approval.
  */
-export async function syncMetaReviewsFromApi(businessId: string) {
-  const { pageAccessToken, pageId, error } = await getValidMetaToken(businessId);
-  if (!pageAccessToken) {
-    return { success: false, error: error || "No Facebook access token found" };
+export async function scrapePublicFacebookPageReviews(pageUrl: string): Promise<{
+  pageName?: string;
+  reviews: RawReviewPayload[];
+}> {
+  const reviews: RawReviewPayload[] = [];
+  let pageName: string | undefined;
+
+  if (!pageUrl || !pageUrl.startsWith("http")) {
+    return { reviews };
   }
 
-  // If pageId isn't stored, resolve it via /me
+  try {
+    const res = await fetch(pageUrl.trim(), {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+      },
+    });
+
+    if (!res.ok) return { reviews };
+    const html = await res.text();
+
+    const ogTitle = html.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i);
+    if (ogTitle && ogTitle[1]) {
+      pageName = ogTitle[1].replace(/\| Facebook/i, "").replace(/- Reviews/i, "").trim();
+    }
+
+    const ldBlocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+    for (const block of ldBlocks) {
+      try {
+        const jsonStr = block.replace(/<\/?script[^>]*>/gi, "").trim();
+        const data = JSON.parse(jsonStr);
+        const items = Array.isArray(data) ? data : [data];
+        for (const item of items) {
+          if (item.name && !pageName) pageName = String(item.name).trim();
+          if (Array.isArray(item.review)) {
+            for (const r of item.review) {
+              const author = r.author?.name || "Facebook Customer";
+              const dateStr = r.datePublished || new Date().toISOString().slice(0, 10);
+              const body = r.reviewBody || r.description || "";
+              const extId = `fb_pub_${Buffer.from(`${author}_${dateStr}_${body.slice(0, 20)}`).toString("hex").slice(0, 22)}`;
+              reviews.push({
+                externalId: extId,
+                reviewerName: author,
+                rating: Number(r.reviewRating?.ratingValue) || 5,
+                reviewText: body,
+                reviewTimestamp: r.datePublished ? new Date(r.datePublished) : new Date(),
+              });
+            }
+          }
+        }
+      } catch {
+        // Ignore non-review JSON-LD block
+      }
+    }
+  } catch (err) {
+    console.warn("Public Facebook Page scrape notice:", err);
+  }
+
+  return { pageName, reviews };
+}
+
+/**
+ * Syncs customer recommendations and reviews from Facebook Page (via Graph API or Public Page URL).
+ */
+export async function syncMetaReviewsFromApi(businessId: string) {
+  const business = await db.business.findUnique({ where: { id: businessId } });
+  const { pageAccessToken, pageId, listingUrl, error } = await getValidMetaToken(businessId);
+
+  // Fallback to Direct Public Page Scraper when connected via public URL without OAuth token
+  if (!pageAccessToken) {
+    const targetUrl = listingUrl || business?.facebookPageUrl;
+    if (targetUrl && targetUrl.startsWith("http")) {
+      const scraped = await scrapePublicFacebookPageReviews(targetUrl);
+      let ingestedCount = 0;
+      if (scraped.reviews.length > 0) {
+        const res = await ingestReviews(businessId, "facebook", scraped.reviews);
+        ingestedCount = res.inserted;
+      }
+      await db.platformConnection.updateMany({
+        where: { businessId, platformName: "facebook" },
+        data: { lastSyncAt: new Date(), status: "connected" },
+      });
+      return {
+        success: true,
+        totalFetched: scraped.reviews.length,
+        newIngested: ingestedCount,
+        note: "Synced via Direct Facebook Page URL.",
+      };
+    }
+    return { success: false, error: error || "No Facebook Page URL or access token found." };
+  }
+
   let targetPageId = pageId;
   if (!targetPageId) {
     try {
@@ -82,7 +180,7 @@ export async function syncMetaReviewsFromApi(businessId: string) {
   }
 
   if (!targetPageId) {
-    return { success: false, error: "Could not identify Facebook Page ID" };
+    return { success: false, error: "Could not identify Facebook Page ID." };
   }
 
   try {
@@ -119,7 +217,7 @@ export async function syncMetaReviewsFromApi(businessId: string) {
 
       rawReviews.push({
         externalId,
-        reviewerName: item.reviewer?.name || "Facebook User",
+        reviewerName: item.reviewer?.name || "Facebook Customer",
         rating: ratingNum,
         reviewText: item.review_text || (ratingNum >= 4 ? "Recommended this business." : "Feedback submitted."),
         reviewTimestamp: new Date(item.created_time || Date.now()),
@@ -145,14 +243,11 @@ export async function syncMetaReviewsFromApi(businessId: string) {
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || "Failed to query Facebook ratings API",
+      error: err?.message || "Failed to query Facebook ratings API.",
     };
   }
 }
 
-/**
- * Publishes a reply comment to a Facebook recommendation/review story.
- */
 export async function postMetaReplyToApi(
   businessId: string,
   externalReviewId: string,
@@ -160,11 +255,10 @@ export async function postMetaReplyToApi(
 ): Promise<{ success: boolean; error?: string; facebookResponse?: any }> {
   const { pageAccessToken, error } = await getValidMetaToken(businessId);
   if (!pageAccessToken) {
-    return { success: false, error: error || "No Facebook token found" };
+    return { success: false, error: error || "No Facebook token found." };
   }
 
   try {
-    // If the review is linked to an open graph story or comment ID
     const commentEndpoint = `https://graph.facebook.com/v21.0/${externalReviewId}/comments`;
     const res = await fetch(commentEndpoint, {
       method: "POST",
@@ -187,7 +281,7 @@ export async function postMetaReplyToApi(
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || "Failed to post comment reply to Facebook",
+      error: err?.message || "Failed to post comment reply to Facebook.",
     };
   }
 }

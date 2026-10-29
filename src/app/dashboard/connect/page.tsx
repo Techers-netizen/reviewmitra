@@ -8,11 +8,12 @@ import {
   RefreshCw,
   ShieldCheck,
   Zap,
-  Clock,
-  ArrowRight,
   Info,
   Lock,
-  ExternalLink,
+  Building2,
+  Phone,
+  Mail,
+  Link2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,30 +28,40 @@ interface PlatformStatus {
 
 export default function ConnectPlatformsPage() {
   const [loading, setLoading] = useState(true);
+  const [businessId, setBusinessId] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState("");
   const [google, setGoogle] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   const [facebook, setFacebook] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   const [justdial, setJustdial] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
   const [indiamart, setIndiamart] = useState<PlatformStatus>({ connected: false, account: null, lastSyncAt: null });
-  
+
   const [googleMapsInput, setGoogleMapsInput] = useState("");
   const [googleMapsLoading, setGoogleMapsLoading] = useState(false);
+
+  const [facebookPageUrl, setFacebookPageUrl] = useState("");
+  const [facebookUrlLoading, setFacebookUrlLoading] = useState(false);
+
   const [justdialUrl, setJustdialUrl] = useState("");
   const [justdialLoading, setJustdialLoading] = useState(false);
-  const [imApiKey, setImApiKey] = useState("");
+
+  // Direct IndiaMART fields (Mobile / Email / Catalog URL — No API Key required)
   const [imMobile, setImMobile] = useState("");
+  const [imEmail, setImEmail] = useState("");
+  const [imCatalogUrl, setImCatalogUrl] = useState("");
   const [imLoading, setImLoading] = useState(false);
 
   const [syncingPlatform, setSyncingPlatform] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  // Load real connection status from DB
   const fetchStatus = async () => {
     try {
-      const res = await fetch("/api/connect/status");
+      const savedBizId = typeof window !== "undefined" ? localStorage.getItem("rm_active_business_id") : null;
+      const url = savedBizId ? `/api/connect/status?businessId=${encodeURIComponent(savedBizId)}` : "/api/connect/status";
+      const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        setBusinessId(data.businessId || null);
         setBusinessName(data.businessName || "");
         setGoogle(data.google || { connected: false, account: null, lastSyncAt: null });
         setFacebook(data.facebook || { connected: false, account: null, lastSyncAt: null });
@@ -65,61 +76,66 @@ export default function ConnectPlatformsPage() {
   };
 
   useEffect(() => {
-    fetchStatus();
+    void fetchStatus();
 
-    // Check query params for OAuth return messages
     if (typeof window !== "undefined") {
       const searchParams = new URLSearchParams(window.location.search);
       const success = searchParams.get("success");
       const error = searchParams.get("error");
       if (success === "google_connected") {
-        setNotification({ type: "success", message: "Google Business Profile connected successfully! Initial reviews synced." });
+        setNotification({
+          type: "success",
+          message: "Google Business Profile connected successfully! All registered business locations have been linked.",
+        });
       } else if (success === "facebook_connected") {
-        setNotification({ type: "success", message: "Facebook Page connected successfully! Recommendations synced." });
+        setNotification({
+          type: "success",
+          message: "Facebook Page connected successfully! Recommendations synced.",
+        });
       } else if (error) {
-        setNotification({ type: "error", message: `Connection notice: ${error.replace(/_/g, " ")}` });
+        setNotification({
+          type: "error",
+          message: `Connection notice: ${error.replace(/_/g, " ")}. You can connect instantly below using your public listing URL.`,
+        });
       }
     }
   }, []);
 
-  // Initiate real Google OAuth
   const handleConnectGoogle = () => {
-    window.location.href = "/api/connect/google";
+    const stateParam = businessId ? `?state=${encodeURIComponent(businessId)}` : "";
+    window.location.href = `/api/connect/google${stateParam}`;
   };
 
-  // Initiate real Facebook OAuth
-  const handleConnectFacebook = () => {
-    window.location.href = "/api/connect/facebook";
-  };
-
-  // Disconnect a platform
   const handleDisconnect = async (platform: string) => {
     setDisconnecting(platform);
     try {
       const res = await fetch("/api/connect/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platformName: platform }),
+        body: JSON.stringify({ businessId, platformName: platform }),
       });
       if (res.ok) {
-        setNotification({ type: "success", message: `${platform.toUpperCase()} disconnected and encrypted tokens removed.` });
+        setNotification({
+          type: "success",
+          message: `${platform.toUpperCase()} has been disconnected from this business location.`,
+        });
         await fetchStatus();
       }
     } catch (e) {
       console.error("Disconnect error:", e);
+      setNotification({ type: "error", message: "Failed to disconnect platform." });
     } finally {
       setDisconnecting(null);
     }
   };
 
-  // Trigger real review sync from live APIs
   const handleSync = async (platform: string) => {
     setSyncingPlatform(platform);
     try {
       const res = await fetch("/api/connect/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platformName: platform }),
+        body: JSON.stringify({ businessId, platformName: platform }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -128,13 +144,13 @@ export default function ConnectPlatformsPage() {
         const note = pSummary?.note ? ` (${pSummary.note})` : "";
         setNotification({
           type: "success",
-          message: `Real API sync completed for ${platform.toUpperCase()}! ${count} new reviews ingested${note}.`,
+          message: `Live sync completed for ${platform.toUpperCase()}! ${count} real reviews synced${note}.`,
         });
         await fetchStatus();
       } else {
         setNotification({
           type: "error",
-          message: `Live sync for ${platform.toUpperCase()} completed with a notice. Ensure your Google/Meta app has required review permissions.`,
+          message: `Sync for ${platform.toUpperCase()} could not complete. Please verify your listing URL.`,
         });
       }
     } catch (e) {
@@ -145,7 +161,7 @@ export default function ConnectPlatformsPage() {
     }
   };
 
-  // Instant Google Maps / Places Sync (Zero GBP quota needed)
+  // 1. Direct Google Maps / Places Sync (Zero GBP API Quota required)
   const handleGooglePlacesSync = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!googleMapsInput.trim()) return;
@@ -154,75 +170,138 @@ export default function ConnectPlatformsPage() {
       const res = await fetch("/api/connect/google/places-sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ googleMapsUrl: googleMapsInput }),
+        body: JSON.stringify({ businessId, googleMapsUrl: googleMapsInput.trim() }),
       });
       const data = await res.json();
       if (res.ok) {
         setNotification({
           type: "success",
-          message: data.message || "Google reviews successfully synced!",
+          message: data.message || "Google Maps business connected and reviews synced successfully!",
         });
         setGoogleMapsInput("");
         await fetchStatus();
       } else {
         setNotification({
           type: "error",
-          message: data.error || "Failed to sync Google reviews.",
+          message: data.error || "Failed to sync Google Maps reviews.",
         });
       }
     } catch (err: any) {
       console.error("Google Places sync error:", err);
-      setNotification({ type: "error", message: "Failed to connect to Google Places sync." });
+      setNotification({ type: "error", message: "Failed to connect to Google Maps sync engine." });
     } finally {
       setGoogleMapsLoading(false);
     }
   };
 
-  // Connect Justdial by URL
+  // 2. Direct Facebook Page Public URL Connect (No Meta App Review required)
+  const handleFacebookUrlConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!facebookPageUrl.trim()) return;
+    setFacebookUrlLoading(true);
+    try {
+      const res = await fetch("/api/connect/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessId,
+          platformName: "facebook",
+          facebookPageUrl: facebookPageUrl.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNotification({
+          type: "success",
+          message: data.message || "Facebook Page connected via public URL!",
+        });
+        setFacebookPageUrl("");
+        await fetchStatus();
+      } else {
+        setNotification({
+          type: "error",
+          message: data.error || "Failed to connect Facebook Page URL.",
+        });
+      }
+    } catch {
+      setNotification({ type: "error", message: "Network error while connecting Facebook Page." });
+    } finally {
+      setFacebookUrlLoading(false);
+    }
+  };
+
+  // 3. Connect Justdial by Public Listing URL
   const handleJustdialConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!justdialUrl) return;
+    if (!justdialUrl.trim()) return;
     setJustdialLoading(true);
     try {
       const res = await fetch("/api/connect/justdial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: justdialUrl }),
+        body: JSON.stringify({ businessId, url: justdialUrl.trim() }),
       });
+      const data = await res.json();
       if (res.ok) {
-        setNotification({ type: "success", message: "Justdial business URL connected! Reviews queued for scrape." });
+        setNotification({
+          type: "success",
+          message: data.message || "Justdial listing URL connected successfully!",
+        });
         setJustdialUrl("");
         await fetchStatus();
+      } else {
+        setNotification({
+          type: "error",
+          message: data.error || "Please enter a valid Justdial listing URL.",
+        });
       }
-    } catch (e) {
-      console.error("Justdial connect error:", e);
+    } catch {
+      setNotification({ type: "error", message: "Failed to connect Justdial listing." });
     } finally {
       setJustdialLoading(false);
     }
   };
 
-  // Connect IndiaMART seller CRM
+  // 4. Direct IndiaMART Connection (Mobile Number / Email / Catalog URL — No API Key required)
   const handleIndiaMartConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!imApiKey || !imMobile) return;
+    if (!imMobile.trim() && !imEmail.trim() && !imCatalogUrl.trim()) {
+      setNotification({
+        type: "error",
+        message: "Please enter your IndiaMART Mobile Number, Email Address, or Company Catalog URL.",
+      });
+      return;
+    }
     setImLoading(true);
     try {
       const res = await fetch("/api/connect/indiamart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: imApiKey, mobileNumber: imMobile }),
+        body: JSON.stringify({
+          businessId,
+          mobileNumber: imMobile.trim(),
+          email: imEmail.trim(),
+          catalogUrl: imCatalogUrl.trim(),
+        }),
       });
+      const data = await res.json();
       if (res.ok) {
-        setNotification({ type: "success", message: "IndiaMART seller CRM connected! Buyer ratings linked." });
-        setImApiKey("");
+        setNotification({
+          type: "success",
+          message: data.message || "IndiaMART seller account connected successfully!",
+        });
         setImMobile("");
+        setImEmail("");
+        setImCatalogUrl("");
         await fetchStatus();
       } else {
-        const err = await res.json();
-        setNotification({ type: "error", message: err.error || "Failed to connect IndiaMART." });
+        setNotification({
+          type: "error",
+          message: data.error || "Failed to connect IndiaMART seller account.",
+        });
       }
-    } catch (e) {
-      console.error("IndiaMART connect error:", e);
+    } catch {
+      setNotification({ type: "error", message: "Failed to connect IndiaMART account." });
     } finally {
       setImLoading(false);
     }
@@ -234,22 +313,22 @@ export default function ConnectPlatformsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-            Platform Integrations
+            Platform Integrations {businessName ? `— ${businessName}` : ""}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Connect live review channels to enable real-time aggregation and automated AI responses.
+            Connect Google Maps, Facebook Page, Justdial, and IndiaMART without needing complex developer API approvals.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1.5 py-1 text-xs">
             <ShieldCheck size={14} className="text-emerald-600" />
-            AES-256 Token Encryption Active
+            No-API Direct Sync Ready
           </Badge>
         </div>
       </div>
 
-      {/* ─── Notification Alert ─────────────────────────────────── */}
+      {/* ─── Notification Toast Banner ──────────────────────────── */}
       {notification && (
         <div
           className={`p-4 rounded-xl border flex items-center justify-between text-xs font-medium ${
@@ -264,7 +343,7 @@ export default function ConnectPlatformsPage() {
           </div>
           <button
             onClick={() => setNotification(null)}
-            className="text-xs underline hover:opacity-80"
+            className="text-xs underline hover:opacity-80 ml-4 shrink-0"
           >
             Dismiss
           </button>
@@ -273,7 +352,7 @@ export default function ConnectPlatformsPage() {
 
       {/* ─── Platform Connection Cards ──────────────────────────── */}
       <div className="grid gap-5">
-        {/* 1. Google Business Profile */}
+        {/* 1. Google Business Profile & Direct Maps Sync */}
         <Card className="p-5 sm:p-6 border-slate-200 hover:border-slate-300 transition-colors">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-4">
@@ -281,8 +360,8 @@ export default function ConnectPlatformsPage() {
                 <span className="font-extrabold text-blue-600 text-xl">G</span>
               </div>
               <div>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="font-bold text-base text-slate-900">Google Business Profile</h3>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="font-bold text-base text-slate-900">Google Business Profile & Maps</h3>
                   {google.connected ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                       <CheckCircle2 size={12} /> Connected (Live)
@@ -294,11 +373,13 @@ export default function ConnectPlatformsPage() {
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Sync Google Maps & Search reviews via official Google Business API. Automated replies post directly.
+                  Supports multiple businesses under one email. Connect via Google OAuth or paste your Google Maps link below to bypass 0-quota API restrictions.
                 </p>
                 {google.connected && (
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                    <span className="font-medium text-slate-700">Account: <strong>{google.account || businessName}</strong></span>
+                    <span className="font-medium text-slate-700">
+                      Linked Location: <strong>{google.account || businessName}</strong>
+                    </span>
                     <span>·</span>
                     <span className="text-slate-400">
                       Last sync: {google.lastSyncAt ? new Date(google.lastSyncAt).toLocaleTimeString() : "Recent"}
@@ -337,25 +418,24 @@ export default function ConnectPlatformsPage() {
                   onClick={handleConnectGoogle}
                   className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold gap-2 shadow-xs"
                 >
-                  <Globe size={14} /> Connect Google Profile
+                  <Globe size={14} /> Connect Google Account
                 </Button>
               )}
             </div>
           </div>
 
-          {/* Quick Instant Google Maps Sync (No GBP quota required) */}
           <div className="mt-4 pt-4 border-t border-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                 <Zap size={13} className="text-amber-500" />
-                Instant Google Maps Sync (Direct link se instant reviews fetch karein)
+                Instant Google Maps Link / Place ID Sync (No API Quota Needed)
               </p>
-              <span className="text-[11px] text-slate-400">Zero waiting for Google API quota approval</span>
+              <span className="text-[11px] text-slate-400">Works immediately for all business locations</span>
             </div>
             <form onSubmit={handleGooglePlacesSync} className="flex flex-col sm:flex-row gap-2">
               <Input
                 type="text"
-                placeholder="Paste Google Maps URL ya Shop Name (e.g. https://maps.app.goo.gl/... ya 'Smile Dental Mumbai')"
+                placeholder="Paste Google Maps URL, Place ID, or Business Name + City (e.g. https://maps.app.goo.gl/...)"
                 value={googleMapsInput}
                 onChange={(e) => setGoogleMapsInput(e.target.value)}
                 className="h-9 text-xs flex-1 bg-slate-50/50"
@@ -367,94 +447,101 @@ export default function ConnectPlatformsPage() {
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 font-semibold shrink-0 gap-1.5"
               >
                 <RefreshCw size={12} className={googleMapsLoading ? "animate-spin" : ""} />
-                {googleMapsLoading ? "Syncing Reviews..." : "Sync Google Reviews"}
+                {googleMapsLoading ? "Syncing Reviews..." : "Connect & Sync Google Maps"}
               </Button>
             </form>
           </div>
         </Card>
 
-        {/* 2. Facebook Page */}
+        {/* 2. Facebook Page (Direct Public Page URL — No Meta OAuth Headache) */}
         <Card className="p-5 sm:p-6 border-slate-200 hover:border-slate-300 transition-colors">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex items-start gap-4 flex-1">
               <div className="h-12 w-12 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
                 <span className="font-extrabold text-indigo-600 text-xl">f</span>
               </div>
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="font-bold text-base text-slate-900">Facebook Page Recommendations</h3>
-                  {facebook.connected ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                      <CheckCircle2 size={12} /> Connected (Live)
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                      Not Connected
-                    </span>
-                  )}
+              <div className="space-y-3 flex-1">
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="font-bold text-base text-slate-900">Facebook Page Recommendations</h3>
+                    {facebook.connected ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <CheckCircle2 size={12} /> Connected (Active)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                        Not Connected
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Paste your public Facebook Page URL below to sync customer recommendations and enable 1-tap AI replies without needing Facebook Login.
+                  </p>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Facebook Page customer recommendations sync via Meta Graph API. AI drafts responses with 1-click clipboard paste.
-                </p>
-                {facebook.connected && (
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                    <span className="font-medium text-slate-700">Page: <strong>{facebook.account || businessName}</strong></span>
-                    <span>·</span>
-                    <span className="text-slate-400">
-                      Last sync: {facebook.lastSyncAt ? new Date(facebook.lastSyncAt).toLocaleTimeString() : "Recent"}
+
+                {!facebook.connected ? (
+                  <form onSubmit={handleFacebookUrlConnect} className="flex flex-col sm:flex-row gap-2 max-w-xl">
+                    <Input
+                      type="url"
+                      placeholder="https://www.facebook.com/YourBusinessPage/reviews"
+                      value={facebookPageUrl}
+                      onChange={(e) => setFacebookPageUrl(e.target.value)}
+                      className="text-xs h-9 flex-1"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={facebookUrlLoading}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-9 font-semibold shrink-0 gap-1.5"
+                    >
+                      <Link2 size={13} />
+                      {facebookUrlLoading ? "Connecting..." : "Connect Facebook URL"}
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                    <span className="font-medium text-slate-700 truncate max-w-md">
+                      Page: <strong>{facebook.account || businessName}</strong>
                     </span>
+                    <span>·</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSync("facebook")}
+                      disabled={syncingPlatform === "facebook"}
+                      className="text-xs h-8 gap-1.5"
+                    >
+                      <RefreshCw size={12} className={syncingPlatform === "facebook" ? "animate-spin" : ""} />
+                      {syncingPlatform === "facebook" ? "Syncing..." : "Sync Now"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDisconnect("facebook")}
+                      disabled={disconnecting === "facebook"}
+                      className="text-xs text-red-600 hover:text-red-700 h-8 px-2"
+                    >
+                      Disconnect
+                    </Button>
                   </div>
                 )}
               </div>
             </div>
-
-            <div className="flex items-center gap-2 sm:self-center shrink-0">
-              {facebook.connected ? (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSync("facebook")}
-                    disabled={syncingPlatform === "facebook"}
-                    className="text-xs h-9 gap-1.5 font-medium"
-                  >
-                    <RefreshCw size={13} className={syncingPlatform === "facebook" ? "animate-spin" : ""} />
-                    {syncingPlatform === "facebook" ? "Syncing..." : "Sync Now"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDisconnect("facebook")}
-                    disabled={disconnecting === "facebook"}
-                    className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-9"
-                  >
-                    {disconnecting === "facebook" ? "Disconnecting..." : "Disconnect"}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={handleConnectFacebook}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-9 font-semibold gap-2 shadow-xs"
-                >
-                  <Globe size={14} /> Connect Facebook Page
-                </Button>
-              )}
-            </div>
           </div>
         </Card>
 
-        {/* 3. Justdial */}
+        {/* 3. Justdial Listing */}
         <Card className="p-5 sm:p-6 border-slate-200 hover:border-slate-300 transition-colors">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 flex-1">
               <div className="h-12 w-12 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0">
                 <span className="font-extrabold text-orange-600 text-lg">Jd</span>
               </div>
               <div className="space-y-3 flex-1">
                 <div>
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="font-bold text-base text-slate-900">Justdial Listing</h3>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="font-bold text-base text-slate-900">Justdial Business Listing</h3>
                     {justdial.connected ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                         <CheckCircle2 size={12} /> Active Scraper
@@ -466,15 +553,15 @@ export default function ConnectPlatformsPage() {
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Justdial does not offer a public API. Enter your public listing URL to schedule automated daily review scraping.
+                    Enter your public Justdial listing URL to extract real customer reviews and ratings automatically via Schema.org JSON-LD.
                   </p>
                 </div>
 
                 {!justdial.connected ? (
-                  <form onSubmit={handleJustdialConnect} className="flex flex-col sm:flex-row gap-2 max-w-lg">
+                  <form onSubmit={handleJustdialConnect} className="flex flex-col sm:flex-row gap-2 max-w-xl">
                     <Input
                       type="url"
-                      placeholder="https://www.justdial.com/Mumbai/Dr-Mehta-Dental-Care/..."
+                      placeholder="https://www.justdial.com/Surat/Your-Business-Name/..."
                       value={justdialUrl}
                       onChange={(e) => setJustdialUrl(e.target.value)}
                       className="text-xs h-9 flex-1"
@@ -486,22 +573,32 @@ export default function ConnectPlatformsPage() {
                       disabled={justdialLoading}
                       className="bg-orange-600 hover:bg-orange-700 text-white text-xs h-9 font-semibold shrink-0"
                     >
-                      {justdialLoading ? "Connecting..." : "Connect URL"}
+                      {justdialLoading ? "Connecting..." : "Connect Justdial URL"}
                     </Button>
                   </form>
                 ) : (
-                  <div className="flex items-center gap-3 text-xs text-slate-600">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
                     <span className="font-medium text-slate-700 truncate max-w-md">
-                      URL: {justdial.account || "Configured Listing"}
+                      Listing: <strong>{justdial.account || "Configured Justdial URL"}</strong>
                     </span>
                     <span>·</span>
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={() => handleSync("justdial")}
+                      disabled={syncingPlatform === "justdial"}
+                      className="text-xs h-8 gap-1.5"
+                    >
+                      <RefreshCw size={12} className={syncingPlatform === "justdial" ? "animate-spin" : ""} />
+                      {syncingPlatform === "justdial" ? "Scraping..." : "Sync Reviews"}
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="ghost"
                       onClick={() => handleDisconnect("justdial")}
-                      className="text-xs text-red-600 hover:text-red-700 h-7 px-2"
+                      className="text-xs text-red-600 hover:text-red-700 h-8 px-2"
                     >
-                      Remove
+                      Disconnect
                     </Button>
                   </div>
                 )}
@@ -510,7 +607,7 @@ export default function ConnectPlatformsPage() {
           </div>
         </Card>
 
-        {/* 4. IndiaMART */}
+        {/* 4. IndiaMART Direct Connect (Mobile Number / Email / Catalog URL — NO API Key Required) */}
         <Card className="p-5 sm:p-6 border-slate-200 hover:border-slate-300 transition-colors">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div className="flex items-start gap-4 flex-1">
@@ -519,11 +616,14 @@ export default function ConnectPlatformsPage() {
               </div>
               <div className="space-y-3 flex-1">
                 <div>
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="font-bold text-base text-slate-900">IndiaMART Seller B2B Integration</h3>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="font-bold text-base text-slate-900">IndiaMART Direct Seller Connection</h3>
+                    <Badge variant="outline" className="text-[10px] border-blue-200 bg-blue-50 text-blue-700">
+                      No API Key Required
+                    </Badge>
                     {indiamart.connected ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        <CheckCircle2 size={12} /> Connected (CRM Active)
+                        <CheckCircle2 size={12} /> Connected
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
@@ -532,41 +632,54 @@ export default function ConnectPlatformsPage() {
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Connect your IndiaMART CRM API Key and Seller Mobile to sync B2B buyer inquiries, verified ratings, and auto-dispatch instant replies.
+                    Connect your IndiaMART seller profile directly using your registered Mobile Number, Email Address, or public IndiaMART Company URL.
                   </p>
                 </div>
 
                 {!indiamart.connected ? (
-                  <form onSubmit={handleIndiaMartConnect} className="flex flex-col sm:flex-row gap-2 max-w-xl">
-                    <Input
-                      type="password"
-                      placeholder="IndiaMART CRM API Key"
-                      value={imApiKey}
-                      onChange={(e) => setImApiKey(e.target.value)}
-                      className="text-xs h-9 flex-1"
-                      required
-                    />
-                    <Input
-                      type="tel"
-                      placeholder="Seller Mobile (+91)"
-                      value={imMobile}
-                      onChange={(e) => setImMobile(e.target.value)}
-                      className="text-xs h-9 w-36"
-                      required
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={imLoading}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold shrink-0"
-                    >
-                      {imLoading ? "Linking..." : "Connect IndiaMART"}
-                    </Button>
+                  <form onSubmit={handleIndiaMartConnect} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="relative">
+                      <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        type="tel"
+                        placeholder="Registered Mobile (+91)"
+                        value={imMobile}
+                        onChange={(e) => setImMobile(e.target.value)}
+                        className="text-xs h-9 pl-8"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        type="email"
+                        placeholder="Registered Email Address"
+                        value={imEmail}
+                        onChange={(e) => setImEmail(e.target.value)}
+                        className="text-xs h-9 pl-8"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        type="url"
+                        placeholder="Catalog URL (optional)"
+                        value={imCatalogUrl}
+                        onChange={(e) => setImCatalogUrl(e.target.value)}
+                        className="text-xs h-9 flex-1"
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={imLoading}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 font-semibold shrink-0"
+                      >
+                        {imLoading ? "Connecting..." : "Connect"}
+                      </Button>
+                    </div>
                   </form>
                 ) : (
-                  <div className="flex items-center gap-3 text-xs text-slate-600">
-                    <span className="font-medium text-slate-700 truncate max-w-md">
-                      Account: {indiamart.account || "IndiaMART Seller Account"}
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                    <span className="font-medium text-slate-700">
+                      Seller Account: <strong>{indiamart.account || "Connected IndiaMART Profile"}</strong>
                     </span>
                     <span>·</span>
                     <Button
@@ -575,7 +688,7 @@ export default function ConnectPlatformsPage() {
                       onClick={() => handleDisconnect("indiamart")}
                       className="text-xs text-red-600 hover:text-red-700 h-7 px-2"
                     >
-                      Remove
+                      Disconnect
                     </Button>
                   </div>
                 )}
@@ -585,24 +698,18 @@ export default function ConnectPlatformsPage() {
         </Card>
       </div>
 
-      {/* ─── Security & OAuth Instructions Box ──────────────────── */}
-      <Card className="p-5 border-slate-200 bg-slate-50/70 space-y-3 text-xs text-slate-600">
+      {/* ─── Multi-Business & Security Note ─────────────────────── */}
+      <Card className="p-5 border-slate-200 bg-slate-50/70 space-y-2 text-xs text-slate-600">
         <div className="flex items-center gap-2 text-slate-900 font-semibold">
-          <Info size={16} className="text-blue-600" />
-          <span>OAuth Production Verification & Redirect URI Info</span>
+          <Building2 size={16} className="text-emerald-600" />
+          <span>Managing Multiple Business Locations on One Account</span>
         </div>
         <p className="leading-relaxed">
-          Google Cloud Console and Meta require your authorized redirect URIs to match your live deployment URL:
+          Use the <strong>Business Switcher dropdown</strong> in the top header to switch between your businesses or add a second location. Each business maintains its own platform links, QR code standee, and AI auto-reply memory. For assistance, contact{" "}
+          <a href="mailto:help.opensoz@gmail.com" className="text-emerald-700 font-semibold underline">
+            help.opensoz@gmail.com
+          </a>.
         </p>
-        <div className="p-3 bg-white rounded-lg border border-slate-200 font-mono text-[11px] space-y-1 text-slate-700">
-          <p>• Google OAuth Redirect URI: <span className="text-emerald-700 font-bold">https://reviewmitra-et3bg1sz4-opensoz.vercel.app/api/connect/google/callback</span></p>
-          <p>• Custom Domain URI: <span className="text-emerald-700 font-bold">https://reviewmitra.opensoz.com/api/connect/google/callback</span></p>
-          <p>• Meta Facebook Redirect URI: <span className="text-indigo-700 font-bold">https://reviewmitra-et3bg1sz4-opensoz.vercel.app/api/connect/facebook/callback</span></p>
-        </div>
-        <div className="flex items-center gap-1.5 text-slate-500 pt-1">
-          <Lock size={12} className="text-emerald-600" />
-          <span>All tokens are encrypted using AES-256-GCM before storage in Neon PostgreSQL.</span>
-        </div>
       </Card>
     </div>
   );

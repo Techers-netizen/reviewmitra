@@ -1,0 +1,11 @@
+{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "ReviewMitra by OpenSoz",
+        "supportEmail": "help.opensoz@gmail.com"
+      }
+    }
+  }
+}

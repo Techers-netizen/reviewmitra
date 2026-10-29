@@ -4,18 +4,24 @@ const STYLES: Record<string, string> = {
   google: "bg-white text-[#4285F4] border-[#4285F4]/30 shadow-sm",
   facebook: "bg-white text-[#1877F2] border-[#1877F2]/30 shadow-sm",
   justdial: "bg-white text-[#F04E23] border-[#F04E23]/30 shadow-sm",
+  indiamart: "bg-white text-[#1D4ED8] border-[#1D4ED8]/30 shadow-sm",
+  qr_direct: "bg-emerald-50 text-emerald-700 border-emerald-300 shadow-sm",
 };
 
 const LABELS: Record<string, string> = {
   google: "G",
   facebook: "f",
   justdial: "Jd",
+  indiamart: "IM",
+  qr_direct: "QR",
 };
 
 const FULL: Record<string, string> = {
-  google: "Google",
-  facebook: "Facebook",
+  google: "Google Maps",
+  facebook: "Facebook Page",
   justdial: "Justdial",
+  indiamart: "IndiaMART",
+  qr_direct: "In-Store QR",
 };
 
 export function PlatformIcon({
@@ -34,7 +40,7 @@ export function PlatformIcon({
         STYLES[platform] || "bg-muted text-muted-foreground border-border",
         className
       )}
-      style={{ width: size, height: size, fontSize: size * 0.42 }}
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
       title={FULL[platform] || platform}
       aria-label={FULL[platform] || platform}
     >

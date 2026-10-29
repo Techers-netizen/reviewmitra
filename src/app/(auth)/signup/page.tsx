@@ -1,7 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowRight, Eye, EyeOff, Sparkles, Building2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  Mail,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,8 +20,10 @@ import { useRouter } from "next/navigation";
 import {
   auth,
   googleProvider,
-  facebookProvider,
   signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
 } from "@/lib/firebase";
 
 export default function SignupPage() {
@@ -25,139 +36,299 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Email + Password Registration
+  // Email verification step state
+  const [verificationStep, setVerificationStep] = useState(false);
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [checkingVerification, setCheckingVerification] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((c) => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  // Email + Password Registration with Mandatory Email Verification
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!fullName.trim() || !businessName.trim()) {
-      setError("Full name aur business name dono zaroori hain");
+      setError("Please enter both your full name and business name.");
       return;
     }
     if (!email.trim() || !password) {
-      setError("Email aur password dono zaroori hain");
+      setError("Please enter a valid email address and password.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
       return;
     }
 
     setLoading(true);
     try {
+      // 1. Register user in Neon PostgreSQL (emailVerified = false initially)
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName,
-          email,
-          phone,
+          fullName: fullName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
           password,
-          businessName,
+          businessName: businessName.trim(),
           category,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Signup failed");
+        setError(data.error || "Sign-up failed. Please check your details and try again.");
         setLoading(false);
         return;
       }
 
-      // Auto sign-in after registration
-      const signinRes = await signIn("credentials", {
-        email,
-        password,
-        mode: "email",
-        redirect: false,
-      });
-
-      if (signinRes?.error) {
-        setError(signinRes.error);
-        setLoading(false);
-      } else {
-        router.push("/dashboard");
-        router.refresh();
+      if (data.verificationUrl) {
+        setVerificationUrl(data.verificationUrl);
       }
+
+      // 2. Also create user in Firebase Auth & trigger official verification email
+      try {
+        const fbCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await sendEmailVerification(fbCred.user);
+      } catch (fbErr: any) {
+        // If user already exists in Firebase Auth, try signing in and sending verification
+        try {
+          const fbCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+          if (!fbCred.user.emailVerified) {
+            await sendEmailVerification(fbCred.user);
+          }
+        } catch {
+          // Fallback verification link is still available via backend token
+        }
+      }
+
+      // Show mandatory email verification step before activating dashboard
+      setVerificationStep(true);
+      setResendCooldown(60);
+      setLoading(false);
     } catch (err: any) {
-      setError("Registration failed. Kripya dobara try karein.");
+      setError("Registration failed. Please try again.");
       setLoading(false);
     }
   };
 
-  // Google 1-Tap Signup
+  // Resend Verification Email
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0 || resending) return;
+    setResending(true);
+    setError(null);
+    setResendMessage(null);
+
+    try {
+      try {
+        const fbCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        if (!fbCred.user.emailVerified) {
+          await sendEmailVerification(fbCred.user);
+        }
+      } catch {
+        // Continue with backend token resend
+      }
+
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend", email: email.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.verificationUrl) setVerificationUrl(data.verificationUrl);
+        setResendMessage("A fresh verification email has been sent! Please check your inbox and spam folder.");
+        setResendCooldown(60);
+      } else {
+        setError(data.error || "Could not resend verification email.");
+      }
+    } catch {
+      setError("Failed to resend verification email. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // Verify & Activate Service
+  const handleConfirmVerifiedAndSignIn = async () => {
+    setCheckingVerification(true);
+    setError(null);
+    try {
+      let isFbVerified = false;
+      try {
+        const fbCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        await fbCred.user.reload();
+        isFbVerified = fbCred.user.emailVerified;
+      } catch {
+        // Check DB verification status
+      }
+
+      if (isFbVerified) {
+        await fetch("/api/auth/verify-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "confirm_verified", email: email.trim() }),
+        });
+      }
+
+      const signinRes = await signIn("credentials", {
+        email: email.trim(),
+        password,
+        mode: "email",
+        firebaseVerified: isFbVerified ? "true" : "false",
+        redirect: false,
+      });
+
+      if (signinRes?.error) {
+        setError(
+          "Your email is not verified yet. Please click the link sent to your email inbox (or use the instant verification link below) before continuing."
+        );
+        setCheckingVerification(false);
+      } else {
+        router.push("/dashboard");
+        router.refresh();
+      }
+    } catch {
+      setError("Could not verify your status. Please try again.");
+      setCheckingVerification(false);
+    }
+  };
+
+  // Google 1-Tap Signup (Facebook Removed)
   const handleGoogleSignup = async () => {
     setError(null);
-    setOauthLoading("google");
+    setOauthLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
       if (!user.email) {
-        throw new Error("Google account se email verify nahi hua");
+        throw new Error("Could not retrieve a verified email address from your Google account.");
       }
 
       const res = await signIn("credentials", {
         mode: "firebase",
         email: user.email,
-        name: user.displayName || "Google User",
+        name: user.displayName || "Business Owner",
         redirect: false,
       });
 
       if (res?.error) {
         setError(res.error);
-        setOauthLoading(null);
+        setOauthLoading(false);
       } else {
         router.push("/dashboard");
         router.refresh();
       }
     } catch (err: any) {
       console.error("Google signup error:", err);
-      setError(err?.message || "Google signup fail hua");
-      setOauthLoading(null);
+      setError(err?.message || "Google sign-up was cancelled or failed. Please try again.");
+      setOauthLoading(false);
     }
   };
 
-  // Facebook 1-Tap Signup
-  const handleFacebookSignup = async () => {
-    setError(null);
-    setOauthLoading("facebook");
-    try {
-      const result = await signInWithPopup(auth, facebookProvider);
-      const user = result.user;
+  if (verificationStep) {
+    return (
+      <div>
+        <div className="text-center mb-6">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
+            <Mail size={13} /> Step 2 of 2 · Email Verification Required
+          </span>
+          <h1 className="text-2xl font-bold text-slate-900">Verify your email address</h1>
+          <p className="mt-1.5 text-sm text-slate-500">
+            We sent a verification link to <strong>{email}</strong> to activate your ReviewMitra service.
+          </p>
+        </div>
 
-      const userEmail = user.email || `${user.uid}@facebook.opensoz.com`;
+        <Card className="p-6 shadow-sm border-slate-200 space-y-4">
+          {error && (
+            <div className="flex items-start gap-2 p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle size={15} className="shrink-0 text-red-600 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
 
-      const res = await signIn("credentials", {
-        mode: "firebase",
-        email: userEmail,
-        name: user.displayName || "Facebook User",
-        redirect: false,
-      });
+          {resendMessage && (
+            <div className="flex items-start gap-2 p-3 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <CheckCircle2 size={15} className="shrink-0 text-emerald-600 mt-0.5" />
+              <span>{resendMessage}</span>
+            </div>
+          )}
 
-      if (res?.error) {
-        setError(res.error);
-        setOauthLoading(null);
-      } else {
-        router.push("/dashboard");
-        router.refresh();
-      }
-    } catch (err: any) {
-      console.error("Facebook signup error:", err);
-      setError(err?.message || "Facebook signup fail hua");
-      setOauthLoading(null);
-    }
-  };
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-2">
+            <p className="font-semibold text-slate-900">Why is email verification required?</p>
+            <p>
+              To protect your business profile and activate automated AI replies, please click the verification link sent to your email inbox.
+            </p>
+            {verificationUrl && (
+              <div className="pt-2 border-t border-slate-200/80">
+                <p className="text-[11px] text-slate-500 mb-1">
+                  Didn&apos;t receive the email due to spam filters? Use your direct verification link:
+                </p>
+                <a
+                  href={verificationUrl}
+                  className="inline-flex items-center gap-1 font-semibold text-emerald-700 underline hover:text-emerald-800"
+                >
+                  Verify {email} instantly & activate account →
+                </a>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            <Button
+              type="button"
+              onClick={handleConfirmVerifiedAndSignIn}
+              disabled={checkingVerification}
+              className="w-full h-11 bg-emerald-600 text-white hover:bg-emerald-700 gap-2 font-semibold"
+            >
+              <CheckCircle2 size={16} />
+              {checkingVerification ? "Checking Verification Status..." : "I Have Verified My Email — Continue"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleResendVerification}
+              disabled={resending || resendCooldown > 0}
+              className="w-full h-10 text-xs font-semibold gap-2"
+            >
+              <RefreshCw size={13} className={resending ? "animate-spin" : ""} />
+              {resending
+                ? "Resending Verification Email..."
+                : resendCooldown > 0
+                ? `Resend Verification Email (${resendCooldown}s)`
+                : "Resend Verification Email"}
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="text-center mb-6">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
-          <Sparkles size={13} /> 7-Day Free Trial · No Credit Card Required
+          <Sparkles size={13} /> 7-Day Free Trial · Plans from ₹79/mo (+GST)
         </span>
         <h1 className="text-2xl font-bold text-slate-900">Start your free trial</h1>
         <p className="mt-1.5 text-sm text-slate-500">
-          Setup AI auto-replies for your local business in 60 seconds
+          Set up AI auto-replies for your business in 60 seconds
         </p>
       </div>
 
@@ -169,13 +340,13 @@ export default function SignupPage() {
           </div>
         )}
 
-        {/* ─── Social 1-Tap Logins ────────────────────────────────────── */}
+        {/* ─── Google 1-Tap Signup (Facebook Removed) ──────────────────── */}
         <div className="space-y-2.5 mb-5">
           <Button
             type="button"
             variant="outline"
             onClick={handleGoogleSignup}
-            disabled={oauthLoading !== null || loading}
+            disabled={oauthLoading || loading}
             className="w-full h-11 border-slate-200 hover:bg-slate-50 gap-3 font-semibold text-slate-700 text-sm"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -196,20 +367,7 @@ export default function SignupPage() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            {oauthLoading === "google" ? "Creating Account..." : "Sign up with Google"}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleFacebookSignup}
-            disabled={oauthLoading !== null || loading}
-            className="w-full h-11 border-slate-200 hover:bg-slate-50 gap-3 font-semibold text-slate-700 text-sm"
-          >
-            <svg className="w-4 h-4" fill="#1877F2" viewBox="0 0 24 24">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-            </svg>
-            {oauthLoading === "facebook" ? "Creating Account..." : "Sign up with Facebook"}
+            {oauthLoading ? "Creating Account..." : "Sign up with Google"}
           </Button>
         </div>
 
@@ -218,7 +376,7 @@ export default function SignupPage() {
             <span className="w-full border-t border-slate-200" />
           </div>
           <div className="relative flex justify-center text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-            <span className="bg-white px-3">Or with Email</span>
+            <span className="bg-white px-3">Or with Email & Password</span>
           </div>
         </div>
 
@@ -270,6 +428,7 @@ export default function SignupPage() {
               <option value="restaurant">Restaurant / Cafe / Bakery</option>
               <option value="gym">Gym / Fitness Studio</option>
               <option value="retail">Retail Shop / Showroom</option>
+              <option value="b2b">B2B / IndiaMART Manufacturer & Wholesale</option>
               <option value="service">Auto / Repair / Local Services</option>
               <option value="other">Other Business</option>
             </select>
@@ -277,7 +436,7 @@ export default function SignupPage() {
 
           <div>
             <label htmlFor="email" className="block text-xs font-medium text-slate-700 mb-1.5">
-              Email Address
+              Email Address <span className="text-slate-400 font-normal">(Verification required)</span>
             </label>
             <Input
               id="email"
@@ -317,7 +476,7 @@ export default function SignupPage() {
 
           <div>
             <label htmlFor="phone" className="block text-xs font-medium text-slate-500 mb-1.5">
-              Phone Number <span className="text-slate-400 font-normal">(Optional, for review alerts)</span>
+              WhatsApp Number <span className="text-slate-400 font-normal">(Optional, for instant review reports)</span>
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-medium">+91</span>
@@ -335,10 +494,10 @@ export default function SignupPage() {
 
           <Button
             type="submit"
-            disabled={loading || oauthLoading !== null}
+            disabled={loading || oauthLoading}
             className="w-full h-11 bg-emerald-600 text-white hover:bg-emerald-700 gap-2 shadow-sm font-semibold"
           >
-            {loading ? "Setting up account..." : "Create Account & Start Trial"}
+            {loading ? "Creating account & sending verification..." : "Create Account & Verify Email"}
             <ArrowRight size={16} />
           </Button>
 
@@ -356,6 +515,12 @@ export default function SignupPage() {
         <Link href="/login" className="font-semibold text-emerald-600 hover:text-emerald-700">
           Log in
         </Link>
+      </p>
+      <p className="mt-2 text-center text-xs text-slate-400">
+        Need help? Email us at{" "}
+        <a href="mailto:help.opensoz@gmail.com" className="text-emerald-600 hover:underline font-medium">
+          help.opensoz@gmail.com
+        </a>
       </p>
     </div>
   );

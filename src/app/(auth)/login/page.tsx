@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowRight, Eye, EyeOff, Mail, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Mail,
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,9 +21,10 @@ import { useRouter } from "next/navigation";
 import {
   auth,
   googleProvider,
-  facebookProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
 } from "@/lib/firebase";
 
 export default function LoginPage() {
@@ -22,8 +33,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  // Unverified Email Resend State
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [fallbackVerifyUrl, setFallbackVerifyUrl] = useState<string | null>(null);
+
+  // Google-registered user trying to use Email+Password state
+  const [googleAccountPrompt, setGoogleAccountPrompt] = useState(false);
+  const [linkingPassword, setLinkingPassword] = useState(false);
 
   // Forgot password state
   const [showForgot, setShowForgot] = useState(false);
@@ -31,98 +53,196 @@ export default function LoginPage() {
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("verified") === "true") {
+        setSuccessBanner("Your email address has been verified! You can now log in to your dashboard.");
+      }
+      const errParam = params.get("error");
+      if (errParam) {
+        setError(errParam);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((c) => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   // Email + Password Login
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!email || !password) {
-      setError("Email aur password dono zaroori hain");
+    setSuccessBanner(null);
+    setNeedsVerification(false);
+    setGoogleAccountPrompt(false);
+
+    if (!email.trim() || !password) {
+      setError("Please enter both your email address and password.");
       return;
     }
+
     setLoading(true);
     try {
+      // Check Firebase email verification status if account exists in Firebase Auth
+      let firebaseVerified = false;
+      try {
+        const fbCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        await fbCred.user.reload();
+        firebaseVerified = fbCred.user.emailVerified;
+      } catch {
+        // Continue to NextAuth DB check (handles Google-first accounts or DB-only accounts)
+      }
+
       const res = await signIn("credentials", {
-        email,
+        email: email.trim(),
         password,
         mode: "email",
+        firebaseVerified: firebaseVerified ? "true" : "false",
         redirect: false,
       });
 
       if (res?.error) {
-        setError(res.error);
+        if (res.error.includes("GOOGLE_ACCOUNT_NO_PASSWORD")) {
+          setGoogleAccountPrompt(true);
+          setError(
+            "This email was originally registered with Google Sign-In. You can sign in with Google above, or click the button below to link this password to your account."
+          );
+        } else if (res.error.includes("EMAIL_NOT_VERIFIED")) {
+          setNeedsVerification(true);
+          setError(
+            "Your email address is not verified yet. Please check your email inbox for the verification link or click 'Resend Verification Email' below."
+          );
+        } else {
+          setError(res.error);
+        }
         setLoading(false);
       } else {
         router.push("/dashboard");
         router.refresh();
       }
     } catch (err: any) {
-      setError("Login failed. Kripya dobara try karein.");
+      setError("Login failed. Please check your credentials and try again.");
       setLoading(false);
     }
   };
 
-  // Google 1-Tap Login via Firebase
-  const handleGoogleLogin = async () => {
+  // Resend Verification Email (Firebase + Backend Token Link)
+  const handleResendVerification = async () => {
+    if (!email.trim() || resendCooldown > 0) return;
+    setResendingEmail(true);
     setError(null);
-    setOauthLoading("google");
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      if (!user.email) {
-        throw new Error("Google account se email verify nahi hua");
+      // 1. Trigger Firebase verification email if possible
+      if (password) {
+        try {
+          const fbCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+          if (!fbCred.user.emailVerified) {
+            await sendEmailVerification(fbCred.user);
+          }
+        } catch {
+          // Ignore Firebase client error and rely on backend verification token
+        }
       }
 
-      // Sync session with NextAuth + Neon DB
+      // 2. Request fresh verification token from backend API
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend", email: email.trim() }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        if (data.verificationUrl) {
+          setFallbackVerifyUrl(data.verificationUrl);
+        }
+        setSuccessBanner(
+          data.message || "Verification email resent! Please check your inbox and spam folder."
+        );
+        setResendCooldown(60);
+      } else {
+        setError(data.error || "Could not resend verification email. Please try again.");
+      }
+    } catch {
+      setError("Failed to resend verification email. Please try again.");
+    } finally {
+      setResendingEmail(false);
+    }
+  };
+
+  // Link Password to an existing Google-registered account after verifying ownership via Google Popup
+  const handleLinkPasswordToGoogleAccount = async () => {
+    if (!email.trim() || !password || password.length < 6) {
+      setError("Please enter a password of at least 6 characters first.");
+      return;
+    }
+    setLinkingPassword(true);
+    setError(null);
+    try {
+      // Verify Google account ownership via popup
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user.email?.toLowerCase() !== email.trim().toLowerCase()) {
+        throw new Error("Please select the same Google account that matches the email entered.");
+      }
+
       const res = await signIn("credentials", {
-        mode: "firebase",
-        email: user.email,
-        name: user.displayName || "Google User",
+        email: email.trim(),
+        password,
+        mode: "email",
+        setPasswordForGoogle: "true",
         redirect: false,
       });
 
       if (res?.error) {
         setError(res.error);
-        setOauthLoading(null);
+        setLinkingPassword(false);
+      } else {
+        router.push("/dashboard");
+        router.refresh();
+      }
+    } catch (err: any) {
+      setError(err?.message || "Could not verify Google account to link password.");
+      setLinkingPassword(false);
+    }
+  };
+
+  // Google 1-Tap Login via Firebase (Facebook Login removed)
+  const handleGoogleLogin = async () => {
+    setError(null);
+    setSuccessBanner(null);
+    setOauthLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      if (!user.email) {
+        throw new Error("Could not retrieve a verified email address from your Google account.");
+      }
+
+      const res = await signIn("credentials", {
+        mode: "firebase",
+        email: user.email,
+        name: user.displayName || "Business Owner",
+        redirect: false,
+      });
+
+      if (res?.error) {
+        setError(res.error);
+        setOauthLoading(false);
       } else {
         router.push("/dashboard");
         router.refresh();
       }
     } catch (err: any) {
       console.error("Google auth error:", err);
-      setError(err?.message || "Google login cancel ho gaya ya fail hua");
-      setOauthLoading(null);
-    }
-  };
-
-  // Facebook Login via Firebase
-  const handleFacebookLogin = async () => {
-    setError(null);
-    setOauthLoading("facebook");
-    try {
-      const result = await signInWithPopup(auth, facebookProvider);
-      const user = result.user;
-
-      const userEmail = user.email || `${user.uid}@facebook.opensoz.com`;
-
-      const res = await signIn("credentials", {
-        mode: "firebase",
-        email: userEmail,
-        name: user.displayName || "Facebook User",
-        redirect: false,
-      });
-
-      if (res?.error) {
-        setError(res.error);
-        setOauthLoading(null);
-      } else {
-        router.push("/dashboard");
-        router.refresh();
-      }
-    } catch (err: any) {
-      console.error("Facebook auth error:", err);
-      setError(err?.message || "Facebook login fail hua");
-      setOauthLoading(null);
+      setError(err?.message || "Google sign-in was cancelled or failed. Please try again.");
+      setOauthLoading(false);
     }
   };
 
@@ -130,18 +250,18 @@ export default function LoginPage() {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!forgotEmail) {
-      setError("Kripya apna registered email enter karein");
+    if (!forgotEmail.trim()) {
+      setError("Please enter your registered email address.");
       return;
     }
     setForgotLoading(true);
     try {
-      await sendPasswordResetEmail(auth, forgotEmail);
+      await sendPasswordResetEmail(auth, forgotEmail.trim());
       setForgotSent(true);
       setForgotLoading(false);
     } catch (err: any) {
       console.error("Password reset error:", err);
-      setError(err?.message || "Password reset email send nahi ho saka");
+      setError(err?.message || "Could not send password reset email. Please verify your email address.");
       setForgotLoading(false);
     }
   };
@@ -156,21 +276,82 @@ export default function LoginPage() {
       </div>
 
       <Card className="p-6 shadow-sm border-slate-200">
-        {/* Error notice */}
-        {error && (
-          <div className="mb-4 flex items-center gap-2 p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle size={15} className="shrink-0 text-red-600" />
-            <span>{error}</span>
+        {/* Success notice */}
+        {successBanner && (
+          <div className="mb-4 flex items-start gap-2 p-3 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <CheckCircle2 size={15} className="shrink-0 text-emerald-600 mt-0.5" />
+            <div className="space-y-1">
+              <span>{successBanner}</span>
+              {fallbackVerifyUrl && (
+                <div>
+                  <a
+                    href={fallbackVerifyUrl}
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 underline hover:text-emerald-900"
+                  >
+                    Click here to verify email instantly →
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* ─── Social 1-Tap Logins ────────────────────────────────────── */}
+        {/* Error notice */}
+        {error && (
+          <div className="mb-4 flex flex-col gap-2.5 p-3.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={15} className="shrink-0 text-red-600 mt-0.5" />
+              <span>{error}</span>
+            </div>
+
+            {/* Action Box 1: Unverified Email -> Resend Verification Email */}
+            {needsVerification && (
+              <div className="pt-2 border-t border-red-200/70 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResendVerification}
+                  disabled={resendingEmail || resendCooldown > 0}
+                  className="h-8 text-xs bg-white border-red-300 text-red-700 hover:bg-red-100 gap-1.5 font-semibold"
+                >
+                  <RefreshCw size={12} className={resendingEmail ? "animate-spin" : ""} />
+                  {resendingEmail
+                    ? "Sending Verification Email..."
+                    : resendCooldown > 0
+                    ? `Resend Available in ${resendCooldown}s`
+                    : "Resend Verification Email"}
+                </Button>
+              </div>
+            )}
+
+            {/* Action Box 2: Google Account trying to use Password -> Link Password */}
+            {googleAccountPrompt && (
+              <div className="pt-2 border-t border-red-200/70 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleLinkPasswordToGoogleAccount}
+                  disabled={linkingPassword}
+                  className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-semibold"
+                >
+                  <ShieldCheck size={13} />
+                  {linkingPassword
+                    ? "Verifying with Google..."
+                    : "Verify with Google & Enable This Password"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── Google 1-Tap Login (Facebook Removed) ────────────────────── */}
         <div className="space-y-2.5 mb-5">
           <Button
             type="button"
             variant="outline"
             onClick={handleGoogleLogin}
-            disabled={oauthLoading !== null || loading}
+            disabled={oauthLoading || loading}
             className="w-full h-11 border-slate-200 hover:bg-slate-50 gap-3 font-semibold text-slate-700 text-sm"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -191,20 +372,7 @@ export default function LoginPage() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            {oauthLoading === "google" ? "Connecting Google..." : "Continue with Google"}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleFacebookLogin}
-            disabled={oauthLoading !== null || loading}
-            className="w-full h-11 border-slate-200 hover:bg-slate-50 gap-3 font-semibold text-slate-700 text-sm"
-          >
-            <svg className="w-4 h-4" fill="#1877F2" viewBox="0 0 24 24">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-            </svg>
-            {oauthLoading === "facebook" ? "Connecting Facebook..." : "Continue with Facebook"}
+            {oauthLoading ? "Connecting with Google..." : "Continue with Google"}
           </Button>
         </div>
 
@@ -213,7 +381,7 @@ export default function LoginPage() {
             <span className="w-full border-t border-slate-200" />
           </div>
           <div className="relative flex justify-center text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-            <span className="bg-white px-3">Or with Email</span>
+            <span className="bg-white px-3">Or with Email & Password</span>
           </div>
         </div>
 
@@ -249,7 +417,7 @@ export default function LoginPage() {
                   }}
                   className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
                 >
-                  Forgot password?
+                  Forgot or set password?
                 </button>
               </div>
               <div className="relative">
@@ -274,10 +442,10 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              disabled={loading || oauthLoading !== null}
+              disabled={loading || oauthLoading}
               className="w-full h-11 bg-emerald-600 text-white hover:bg-emerald-700 gap-2 shadow-sm font-semibold"
             >
-              {loading ? "Logging in..." : "Log in"}
+              {loading ? "Signing in..." : "Log in"}
               <ArrowRight size={16} />
             </Button>
           </form>
@@ -305,16 +473,16 @@ export default function LoginPage() {
               <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 space-y-1.5">
                 <div className="flex items-center gap-2 font-bold text-emerald-900">
                   <CheckCircle2 size={16} className="text-emerald-600" />
-                  Reset Link Sent!
+                  Password Reset Link Sent!
                 </div>
                 <p>
-                  Google mail infrastructure se password reset link <strong>{forgotEmail}</strong> par bhej diya gaya hai. Kripya apna inbox check karein.
+                  We have sent a password reset link to <strong>{forgotEmail}</strong>. Please check your inbox and spam folder.
                 </p>
               </div>
             ) : (
               <form onSubmit={handleForgotPassword} className="space-y-3">
                 <p className="text-xs text-slate-500">
-                  Apna registered email address enter karein. Hum aapko instant password reset link bhejenge.
+                  Enter your registered email address and we will send you an instant password reset link.
                 </p>
                 <div>
                   <Input
@@ -345,6 +513,12 @@ export default function LoginPage() {
         <Link href="/signup" className="font-semibold text-emerald-600 hover:text-emerald-700">
           Start 7-day free trial
         </Link>
+      </p>
+      <p className="mt-2 text-center text-xs text-slate-400">
+        Need help? Email us at{" "}
+        <a href="mailto:help.opensoz@gmail.com" className="text-emerald-600 hover:underline font-medium">
+          help.opensoz@gmail.com
+        </a>
       </p>
     </div>
   );
