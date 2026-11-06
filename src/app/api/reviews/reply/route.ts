@@ -3,9 +3,25 @@ import { db } from "@/lib/db";
 import { postGoogleReplyToApi } from "@/lib/google-business";
 import { postMetaReplyToApi } from "@/lib/meta-business";
 import { detectReviewLanguage } from "@/lib/review-engine";
+import { enqueueWorkerJob, isWorkerTransportEnabled, workerBusinessUrl } from "@/lib/worker-queue";
 
 // POST /api/reviews/reply
-// Body: { reviewId: string, replyText: string, tone?: string, generatedByAi?: boolean }
+// Body: { reviewId: string, replyText: string, tone?: string,
+//         generatedByAi?: boolean, dryRun?: boolean }
+//
+// Google transport is chosen with GOOGLE_REPLY_TRANSPORT:
+//   "worker"  -> queue a SeleniumBase browser-worker job (no GBP API).
+//               The reply is recorded as "queued" and only becomes "posted"
+//               when the worker verifies it on the page (see
+//               /api/worker/jobs/[id]/result). A failed job becomes "failed".
+//   anything else (default) -> official GBP API as before, BUT a failed API
+//               call is now recorded as "failed" (never "posted") and the
+//               review is NOT marked replied. This fixes the old false-
+//               success bug where failed replies showed as published live.
+//
+// dryRun=true only works with the worker transport: it enqueues a dry-run
+// job (the worker checks the review + Reply control, types nothing, submits
+// nothing) and creates NO ReviewReply row.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -24,6 +40,73 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Review not found." }, { status: 404 });
     }
 
+    const detectedLang = detectReviewLanguage(body.replyText);
+    const dryRun = !!body.dryRun;
+
+    // --- Google via SeleniumBase worker ----------------------------------
+    if (review.platformName === "google" && isWorkerTransportEnabled()) {
+      if (dryRun) {
+        const job = enqueueWorkerJob({
+          type: "google_reply",
+          businessId: review.businessId,
+          reviewId: review.id,
+          externalReviewId: review.externalReviewId,
+          reviewerName: review.reviewerName,
+          reviewSnippet: (review.reviewText || "").slice(0, 120),
+          replyText: String(body.replyText).trim(),
+          businessUrl: workerBusinessUrl(review.business),
+          dryRun: true,
+          replyDbId: null,
+        });
+        return NextResponse.json({
+          ok: true,
+          jobId: job.id,
+          postStatus: "dry_run_queued",
+          languageUsed: detectedLang.code,
+          platform: "google",
+          note: "Dry-run job queued for the browser worker. Nothing will be typed or submitted.",
+        });
+      }
+
+      // Create the row FIRST so the worker result can update it, but keep it
+      // "queued": isReplied stays false until the worker verifies the post.
+      const reply = await db.reviewReply.create({
+        data: {
+          reviewId: review.id,
+          businessId: review.businessId,
+          replyText: String(body.replyText).trim(),
+          generatedByAi: !!body.generatedByAi,
+          aiToneUsed: body.tone || null,
+          languageUsed: detectedLang.code,
+          postStatus: "queued",
+        },
+      });
+      const job = enqueueWorkerJob({
+        type: "google_reply",
+        businessId: review.businessId,
+        reviewId: review.id,
+        externalReviewId: review.externalReviewId,
+        reviewerName: review.reviewerName,
+        reviewSnippet: (review.reviewText || "").slice(0, 120),
+        replyText: String(body.replyText).trim(),
+        businessUrl:
+          review.business.googleReviewUrl ||
+          "https://share.google/Rd7mruMQjwTihYs01",
+        dryRun: false,
+        replyDbId: reply.id,
+      });
+      return NextResponse.json({
+        ok: true,
+        replyId: reply.id,
+        jobId: job.id,
+        postStatus: "queued",
+        languageUsed: detectedLang.code,
+        platform: "google",
+        note: "Reply queued for the browser worker. It will show as posted only after the worker verifies it on Google Maps.",
+      });
+    }
+
+    // --- Direct API transports (GBP / Meta) -------------------------------
     let postStatus = "posted";
     let publishError = "";
 
@@ -34,7 +117,10 @@ export async function POST(req: NextRequest) {
         body.replyText
       );
       if (!gResult.success) {
-        publishError = gResult.error || "Saved in dashboard (direct link copy ready)";
+        // HONEST FAILURE: never record a failed Google reply as "posted".
+        postStatus = "failed";
+        publishError =
+          gResult.error || "Google rejected the reply. It was not posted.";
       }
     } else if (review.platformName === "facebook") {
       const fbResult = await postMetaReplyToApi(
@@ -43,15 +129,15 @@ export async function POST(req: NextRequest) {
         body.replyText
       );
       if (!fbResult.success) {
-        publishError = fbResult.error || "Saved in dashboard (direct link copy ready)";
+        postStatus = "failed";
+        publishError =
+          fbResult.error || "Facebook rejected the reply. It was not posted.";
       }
     } else if (review.platformName === "justdial" || review.platformName === "indiamart") {
       postStatus = "copied_to_clipboard";
     } else if (review.platformName === "qr_direct") {
       postStatus = "posted";
     }
-
-    const detectedLang = detectReviewLanguage(body.replyText);
 
     const reply = await db.reviewReply.create({
       data: {
@@ -65,10 +151,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await db.review.update({
-      where: { id: review.id },
-      data: { isReplied: true },
-    });
+    // Only mark the review replied when the reply is actually posted (or
+    // saved for manual paste on Justdial/IndiaMART). Queued/failed replies
+    // leave isReplied false so the dashboard keeps showing them as pending.
+    if (postStatus === "posted" || postStatus === "copied_to_clipboard") {
+      await db.review.update({
+        where: { id: review.id },
+        data: { isReplied: true },
+      });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -80,9 +171,11 @@ export async function POST(req: NextRequest) {
       note:
         postStatus === "copied_to_clipboard"
           ? `Reply saved and copied to clipboard for 1-tap pasting on ${review.platformName.toUpperCase()}.`
-          : `Reply published and recorded for ${review.platformName.toUpperCase()}.`,
+          : postStatus === "failed"
+            ? `Reply could NOT be posted: ${publishError}`
+            : `Reply published and recorded for ${review.platformName.toUpperCase()}.`,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("POST /api/reviews/reply error:", err);
     return NextResponse.json(
       { error: "Failed to post review reply." },

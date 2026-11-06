@@ -129,9 +129,22 @@ export function Dashboard() {
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to post reply.");
     void loadReviews(true);
+    // Never claim a reply is live unless the backend verified it. "queued"
+    // means the browser worker still has to post it; "failed" means Google/
+    // Facebook rejected it; "dry_run_queued" means nothing was submitted.
+    const toastTitle =
+      json.postStatus === "copied_to_clipboard"
+        ? "Reply copied to clipboard"
+        : json.postStatus === "queued"
+          ? "Reply queued — browser worker will post it"
+          : json.postStatus === "dry_run_queued"
+            ? "Dry-run queued — nothing will be posted"
+            : json.postStatus === "failed"
+              ? "Reply failed to post"
+              : "Reply published live";
     toast({
-      title: json.postStatus === "copied_to_clipboard" ? "Reply copied to clipboard" : "Reply published live",
-      description: json.note || "Your reply has been saved and published.",
+      title: toastTitle,
+      description: json.publishError || json.note || "Your reply has been saved and published.",
     });
     return json as { ok: boolean; postStatus: string; note?: string; platform: string };
   }

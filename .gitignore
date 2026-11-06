@@ -62,3 +62,16 @@ scratch/
 
 qa/sessions/
 /qa/sessions/
+
+# SeleniumBase worker (local only, never committed)
+worker/.venv/
+worker/config.json
+worker/jobs/*.json
+worker/*.log
+
+worker/.chrome/
+
+downloaded_files/
+
+__pycache__/
+worker/*.png
