@@ -84,7 +84,7 @@ interception with its own CA, which Chrome's NSS store does not trust
    also passes **`--ssl-version-max=tls1.2`**; without it google.com fails
    with `ERR_CONNECTION_CLOSED`.
 
-## Local test status (2026-11-06, this VM)
+## Local test status (2026-11-08, this VM)
 
 End-to-end plumbing verified on localhost:3000 with
 `GOOGLE_REPLY_TRANSPORT=worker`:
@@ -96,15 +96,39 @@ End-to-end plumbing verified on localhost:3000 with
   job file ends `failed` with an honest error + a real JSON result ->
   poller reports to `POST /api/worker/jobs/<id>/result` -> **200**
   (`applied: "no-db-row"` for the test job, which has no DB row).
-- **NOT verified here: the Maps page itself never renders in this VM.**
-  The search URL loads the Maps shell (title "Google Maps") but the
-  content stays blank; the place URL times out (`ERR_TIMED_OUT` /
-  `chrome-error://chromewebdata/`). So review extraction selectors
-  (`div[data-review-id]` etc.) and the dry-run "Reply control present"
-  check are still unverified against a real rendered page, and the
-  worker fails every job here with "business page failed to load".
-  First run on a machine with normal internet will tell whether the
-  selectors are right.
+- **FIXED 2026-11-08: Maps now renders in this VM's worker Chrome and
+  review extraction works.** The 2026-11-06 blank page was a stale /
+  degraded local proxy plus the worker's fixed 3s sleeps racing Maps'
+  client-side boot; the proxy is healthy now (CONNECTs to Google hosts
+  all 200) and every step waits for its marker (up to 30s). The real
+  blocker was a parse bug, not rendering: in UC mode
+  `sb.find_elements` returns CDP Elements whose `.find_elements()` /
+  `.find_element()` are `None` (the class `__getattr__` returns the
+  HTML attribute or None), so the old card-scoped extraction silently
+  returned "" for every field and every card was skipped (0 reviews
+  even though cards were in the DOM). Extraction is now done by JS
+  (`sb.execute_script` with an IIFE; bare `return` is a SyntaxError
+  here). Verified 2026-11-08, logged-out, New Lucky Restaurant:
+  `list-reviews` returns 5 real reviews (Adrian Rodrigues 5★, Iram
+  Shah 5★, D.J. 4★, Electrofix Services 2★, shubham sharma 4★) via
+  both the Maps search URL (name + city) and the raw share link
+  (share.google redirects to Search; the worker now uses the Search
+  page title "New Lucky Restaurant Mumbai" as the Maps query and only
+  clicks a result whose name matches the query -- a bare-name search
+  once opened the wrong business, "New One Lucky" in New York).
+  `post-reply --dry-run` finds the review and honestly reports "no
+  Reply control found -- are we logged in as the business owner?"
+  (logged-out pages have no Reply buttons, as expected).
+- **Still open: logged-in session + pagination.** Logged-out, Google
+  shows a limited view: 5 reviews, no lazy-load on scroll, "See more
+  reviews" does not expand the list, and the Sort menu does not open.
+  The worker's scroll logic is in place, but loading all 942 reviews
+  and the Reply buttons need the owner's logged-in Chrome profile
+  (the worker never logs in; the profile must be captured on a machine
+  where Maps renders -- the cloud browser's profile is not on this
+  VM). The live reply path (JS click on the card's Reply button,
+  `sb.type` / `sb.click` for the box and Post) is written for that
+  session but cannot be verified until it exists.
 - **Database is unreachable from this VM.** Direct Postgres connections
   are denied by the assistant's network policy: the connection is
   answered with "Database connections is turned off for this assistant.

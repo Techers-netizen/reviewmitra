@@ -60,17 +60,89 @@ def emit(payload: dict) -> None:
 # ---------------------------------------------------------------------------
 # Review extraction. Google Maps changes its DOM classes often, so we try
 # several selector strategies and keep whichever yields review cards.
+#
+# IMPORTANT (2026-11-08, verified on this VM): in SeleniumBase UC mode the
+# driver is CDP-based (seleniumbase.undetected.cdp_driver). Elements
+# returned by sb.find_elements are CDP Element objects: .text and
+# .get_attribute() work, but .find_elements()/.find_element() are None
+# (calling them raises "'NoneType' object is not callable"), and raw
+# sb.driver.* calls fail (chromedriver HTTP endpoint refuses connections).
+# Only sb.* methods and sb.execute_script() work reliably. So ALL
+# card-scoped queries are done in ONE JS call (execute_script with an
+# IIFE -- a bare `return` at top level is a SyntaxError here), never via
+# WebElement.find_elements. Document-level sb.find_elements/sb.click/
+# sb.type work fine.
 # ---------------------------------------------------------------------------
 
+# A review card on the Maps Reviews tab (verified 2026-11-08):
+#   div.jftiEf[data-review-id] -- the full card (author div.d4r55,
+#   text span.wiI7pd, date span.rsqaWe, rating span.kvMYJc[aria-label]).
+# div[data-review-id] also matches inner duplicate divs (same rid), so
+# extraction dedupes by rid and prefers div.jftiEf.
 REVIEW_CARD_SELECTORS = [
-    "div[data-review-id]",          # current Maps review card
-    "div.jftiEf",                   # older Maps review card
+    "div.jftiEf",
+    "div[data-review-id]",
 ]
 
-TEXT_SELECTORS = ["span.wiI7pd", "span[jslog]", "div.MyEned span"]
-AUTHOR_SELECTORS = ["div.d4r55", "div.TqP5B", "a[href*='/maps/contrib/']"]
-DATE_SELECTORS = ["span.rsqaWe", "span.p2Hz5d"]
-RATING_SELECTORS = ["span.kvMYJc[aria-label]", "span[aria-label*=' star']"]
+_EXTRACT_JS = """(function(){
+  var cards = Array.from(document.querySelectorAll('div.jftiEf'));
+  if (!cards.length) cards = Array.from(document.querySelectorAll('div[data-review-id]'));
+  var seen = {};
+  var out = [];
+  cards.forEach(function(card, idx){
+    var rid = card.getAttribute('data-review-id') || '';
+    if (!rid) {
+      var inner = card.querySelector('[data-review-id]');
+      if (inner) rid = inner.getAttribute('data-review-id') || '';
+    }
+    var authorEl = card.querySelector('div.d4r55');
+    var textEl = card.querySelector('span.wiI7pd');
+    var dateEl = card.querySelector('span.rsqaWe');
+    var ratingEl = card.querySelector('span.kvMYJc[aria-label]');
+    var rating = null;
+    if (ratingEl) {
+      var m = /(\\d)\\s*star/.exec(ratingEl.getAttribute('aria-label') || '');
+      if (m) rating = parseInt(m[1], 10);
+    }
+    var txt = textEl ? textEl.textContent.trim() : '';
+    var auth = authorEl ? authorEl.textContent.trim() : '';
+    var dt = dateEl ? dateEl.textContent.trim() : '';
+    var key = rid || (auth + '|' + dt + '|' + txt.slice(0, 60));
+    if (!key || seen[key]) return;
+    if (!auth && !txt) return;
+    seen[key] = true;
+    var replyBtn = card.querySelector("button[aria-label*='Reply'], button[aria-label*='Respond']");
+    out.push({
+      review_key: key,
+      author: auth,
+      rating: rating,
+      text: txt,
+      date: dt,
+      has_owner_reply: (card.textContent || '').indexOf('Response from the owner') !== -1,
+      has_reply_button: !!replyBtn,
+      card_index: idx
+    });
+  });
+  return out;
+})();"""
+
+_SCROLL_JS = """(function(){
+  var els = document.querySelectorAll('div.m6QErb.DxyBCb.kA9KIf.dS8AEf');
+  if (!els.length) return -1;
+  var el = els[els.length - 1];
+  el.scrollTop = el.scrollHeight;
+  return el.scrollTop;
+})();"""
+
+
+def _extract_reviews_js(sb) -> list[dict]:
+    """One JS round-trip: return the currently-visible parsed reviews."""
+    try:
+        out = sb.execute_script(_EXTRACT_JS)
+    except Exception as exc:
+        log(f"JS extraction failed: {exc}")
+        return []
+    return out or []
 
 
 def _text(el) -> str:
@@ -80,132 +152,183 @@ def _text(el) -> str:
         return ""
 
 
-def _first_text(sb, root, selectors):
-    for sel in selectors:
-        try:
-            els = root.find_elements("css selector", sel) if hasattr(root, "find_elements") else sb.find_elements(sel)
-        except Exception:
-            continue
-        for el in els or []:
-            t = _text(el)
-            if t:
-                return t
-    return ""
-
-
-def _rating_from_card(sb, card) -> int | None:
-    for sel in RATING_SELECTORS:
-        try:
-            els = card.find_elements("css selector", sel)
-        except Exception:
-            continue
-        for el in els or []:
-            label = el.get_attribute("aria-label") or ""
-            m = re.search(r"(\d)\s*star", label)
-            if m:
-                return int(m.group(1))
-    return None
-
-
 def extract_reviews(sb, max_reviews: int = 50) -> list[dict]:
-    """Scroll the reviews panel to load more, then parse visible cards."""
+    """Scroll the reviews panel to load more, then parse visible cards.
+
+    Returns dicts with review_key, author, rating, text, date,
+    has_owner_reply, plus has_reply_button and card_index. The list
+    loads via RPC after the Reviews tab click, so tolerate a few
+    empty rounds before giving up (cards can take seconds to appear).
+    """
     reviews: list[dict] = []
     seen: set[str] = set()
-
-    # Scroll the reviews list to lazy-load more entries. Stop early when
-    # no review cards appear at all (e.g. we are not on a reviews page).
-    empty_scrolls = 0
-    for _ in range(12):
+    prev_count = -1
+    stable_rounds = 0
+    for _ in range(15):
+        for r in _extract_reviews_js(sb):
+            if r.get("review_key") and r["review_key"] not in seen:
+                seen.add(r["review_key"])
+                reviews.append(r)
+                if len(reviews) >= max_reviews:
+                    return reviews[:max_reviews]
+        if len(reviews) == prev_count:
+            stable_rounds += 1
+            if stable_rounds >= 2:
+                break
+        else:
+            stable_rounds = 0
+        prev_count = len(reviews)
         try:
-            sb.execute_script(
-                "var els=document.querySelectorAll('div.m6QErb.DxyBCb.kA9KIf.dS8AEf');"
-                "if(els.length){els[els.length-1].scrollTop+=3000;}"
-            )
+            sb.execute_script(_SCROLL_JS)
         except Exception:
             pass
-        sb.sleep(1.2)
-        cards = find_review_cards(sb)
-        if not cards:
-            empty_scrolls += 1
-            if empty_scrolls >= 3:
-                log("no review cards after scrolling; stopping")
-                break
-        elif len(cards) >= max_reviews:
-            break
-
-    for card in find_review_cards(sb):
-        try:
-            rid = card.get_attribute("data-review-id") or ""
-            author = _first_text(sb, card, AUTHOR_SELECTORS)
-            text = _first_text(sb, card, TEXT_SELECTORS)
-            date = _first_text(sb, card, DATE_SELECTORS)
-            rating = _rating_from_card(sb, card)
-            key = rid or f"{author}|{date}|{(text or '')[:60]}"
-            if not key or key in seen:
-                continue
-            if not author and not text:
-                continue
-            seen.add(key)
-            reviews.append(
-                {
-                    "review_key": key,
-                    "author": author,
-                    "rating": rating,
-                    "text": text,
-                    "date": date,
-                    "has_owner_reply": "Response from the owner" in (card.text or ""),
-                }
-            )
-            if len(reviews) >= max_reviews:
-                break
-        except Exception as exc:  # one bad card must not kill the run
-            log(f"skip unparsable review card: {exc}")
-    return reviews
+        sb.sleep(1.5)
+    return reviews[:max_reviews]
 
 
 def find_review_cards(sb):
-    for sel in REVIEW_CARD_SELECTORS:
+    """Return the currently-visible parsed review dicts (JS extraction).
+
+    Kept the old name: callers treat a non-empty return as "cards are
+    present". The items are dicts, not WebElements.
+    """
+    return _extract_reviews_js(sb)
+
+
+def _wait_for(sb, predicate, timeout: float = 30, interval: float = 1.0, label: str = "") -> bool:
+    """Poll predicate() until truthy or timeout. Returns True if satisfied."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
         try:
-            cards = sb.find_elements(sel)
+            if predicate():
+                return True
         except Exception:
-            cards = []
-        if cards:
-            return cards
-    return []
+            pass
+        sb.sleep(interval)
+    log(f"wait timed out ({timeout}s): {label}")
+    return False
+
+
+def _url_is_place(url: str) -> bool:
+    return "/maps/place/" in (url or "")
+
+
+def _maps_search_url_for_query(query: str) -> str:
+    from urllib.parse import quote
+
+    return f"https://www.google.com/maps/search/{quote(query)}"
+
+
+def _name_matches_query(query: str, result_name: str) -> bool:
+    """True if a Maps search result's name fits the search query.
+
+    Guards against clicking the wrong business: every word of the
+    result's name must appear in the query (e.g. result "New One Lucky"
+    does NOT match query "New Lucky Restaurant" -- "one" is missing --
+    while "New Lucky Restaurant" matches "New Lucky Restaurant Mumbai").
+    """
+    def words(s: str) -> list[str]:
+        return [re.sub(r"[^a-z0-9]", "", w) for w in (s or "").lower().split() if w]
+
+    qw = set(words(query))
+    rw = [w for w in words(result_name) if w]
+    if len(rw) < 2 or not qw:
+        return False
+    return all(w in qw for w in rw)
+
+
+def _query_from_search_url(url: str) -> str:
+    """The query text of a /maps/search/<query> URL ('' otherwise)."""
+    from urllib.parse import unquote, urlparse
+
+    path = urlparse(url or "").path
+    marker = "/maps/search/"
+    if marker not in path:
+        return ""
+    return unquote(path.split(marker, 1)[1].split("/")[0]).strip()
 
 
 def open_business_reviews(sb, business_url: str) -> str:
-    """Open the share link, follow the redirect to the Maps place page,
-    then open its Reviews tab. Returns the final URL.
+    """Open the business page, land on its place page, then open its Reviews
+    tab. Returns the final URL.
 
     Google Maps is heavy and some of its subresource hosts are blocked by
     this VM's egress proxy, so a full page-load wait can hang: cap the load
     timeout and continue with whatever rendered, and retry once on an
     error page.
+
+    Timing matters more than it looks: the Maps app boots client-side, so
+    the search URL only redirects to the place URL after a few seconds and
+    the review cards only appear a few seconds after the Reviews tab is
+    clicked. Fixed short sleeps used to race that boot and the worker saw
+    an empty page; every step below now waits for its marker (up to 30s).
     """
     from selenium.common.exceptions import TimeoutException
 
     try:
         sb.driver.set_page_load_timeout(60)
-    except Exception:
-        pass
-    for attempt in (1, 2):
-        log(f"opening business URL (attempt {attempt}): {business_url}")
+    except Exception as exc:
+        # NOTE: in SeleniumBase UC mode, sb.driver.* calls do not reach the
+        # chromedriver HTTP endpoint (connection refused); sb.* methods do.
+        # This is best-effort only; SeleniumBase's own default timeout
+        # still applies if it fails.
+        log(f"set_page_load_timeout unavailable (ignored): {exc}")
+
+    def _open(url: str) -> None:
         try:
-            sb.open(business_url)
+            sb.open(url)
         except TimeoutException:
             log("page load timed out; stopping load and continuing")
             try:
-                sb.driver.execute_script("window.stop();")
+                # sb.execute_script works in UC mode; sb.driver.execute_script
+                # does NOT (chromedriver endpoint refuses the connection).
+                sb.execute_script("window.stop();")
             except Exception:
                 pass
-        sb.sleep(3)
+
+    expected_query = _query_from_search_url(business_url)
+    for attempt in (1, 2):
+        log(f"opening business URL (attempt {attempt}): {business_url}")
+        _open(business_url)
+        # A share.google link redirects to a mobile Google Search page, not
+        # Maps (the app avoids this via workerBusinessUrl, but the worker
+        # must cope when given a share link directly, e.g. manual runs).
+        url = sb.get_current_url()
+        if "/maps/" not in url and "/search" in url:
+            from urllib.parse import parse_qs, urlparse
+
+            q = parse_qs(urlparse(url).query).get("q", [""])[0]
+            # The Search page title is more specific than the bare q
+            # param: "New Lucky Restaurant Mumbai", not just the name.
+            # Prefer it when it contains q (same business + location).
+            title_query = (sb.get_title() or "").replace(" - Google Search", "").strip()
+            if title_query and q and q.lower() in title_query.lower():
+                query = title_query
+            else:
+                query = q or title_query
+            if query:
+                expected_query = query
+                maps_url = _maps_search_url_for_query(query)
+                log(f"share link landed on Search; switching to Maps: {maps_url}")
+                _open(maps_url)
+        # Wait for the place page (the app redirects search -> place
+        # client-side) or for place-result links to appear.
+        landed = _wait_for(
+            sb,
+            lambda: _url_is_place(sb.get_current_url())
+            or bool(sb.find_elements("a.hfpxzc")),
+            timeout=30,
+            label="place page or search results",
+        )
         url = sb.get_current_url()
         log(f"resolved place URL: {url}")
-        if not url.startswith("chrome-error://"):
-            break
-        log("error page; retrying once after a short wait")
-        sb.sleep(3)
+        if url.startswith("chrome-error://"):
+            log("error page; retrying once after a short wait")
+            sb.sleep(3)
+            continue
+        if not landed:
+            log("WARNING: place page did not load in 30s; continuing anyway")
+        break
     if url.startswith("chrome-error://"):
         raise RuntimeError(f"business page failed to load: {url}")
 
@@ -225,32 +348,47 @@ def open_business_reviews(sb, business_url: str) -> str:
 
     # If this is a search-results page, open the place itself first.
     # Search results are links like <a class="hfpxzc" aria-label="<name>">.
-    if "/maps/search" in url:
+    # Guard: only click a result whose name matches the search query.
+    # Clicking the first result blindly once opened the wrong business
+    # ("New One Lucky", New York) for a bare-name search, so a mismatch
+    # now fails loudly instead of extracting the wrong business.
+    if "/maps/search" in sb.get_current_url():
         clicked = False
-        for sel in [
-            "a.hfpxzc[aria-label]",
-            "//a[contains(@aria-label, 'New Lucky')]",
-            "//a[@class='hfpxzc']",
-        ]:
+        try:
+            results = sb.find_elements("a.hfpxzc[aria-label]") or []
+        except Exception:
+            results = []
+        names = []
+        for el in results:
             try:
-                if sel.startswith("//"):
-                    els = sb.find_elements(sel, by="xpath")
-                else:
-                    els = sb.find_elements(sel)
-                if els:
-                    els[0].click()
-                    clicked = True
-                    log(f"opened place result via {sel}")
-                    sb.sleep(3)
-                    break
+                names.append(el.get_attribute("aria-label") or "")
+            except Exception:
+                names.append("")
+        log(f"search results: {names[:6]}")
+        for el, name in zip(results, names):
+            if expected_query and not _name_matches_query(expected_query, name):
+                continue
+            try:
+                el.click()
+                clicked = True
+                log(f"opened place result: {name!r}")
+                break
             except Exception:
                 continue
         if not clicked:
-            log("WARNING: could not click a place result on the search page")
+            raise RuntimeError(
+                "no search result matched the business query "
+                f"{expected_query!r} (results: {names[:6]}); refusing to "
+                "open a possibly wrong business -- pass a Maps search URL "
+                "with the business name + city, or the place URL"
+            )
+        _wait_for(sb, lambda: _url_is_place(sb.get_current_url()), timeout=30, label="place page after result click")
         url = sb.get_current_url()
         log(f"place URL after result click: {url}")
 
-    # Click the "Reviews" tab if present.
+    # Click the "Reviews" tab if present, then wait for review cards: the
+    # list loads via RPC after the click and is empty for several seconds.
+    clicked_tab = False
     for sel in [
         "button[aria-label*='Reviews']",
         "button[data-tab-index='1']",
@@ -261,11 +399,20 @@ def open_business_reviews(sb, business_url: str) -> str:
                 sb.click_xpath(sel)
             else:
                 sb.click(sel)
+            clicked_tab = True
             log(f"clicked Reviews tab via {sel}")
-            sb.sleep(2)
             break
         except Exception:
             continue
+    if not clicked_tab:
+        log("WARNING: Reviews tab not found; continuing on the current panel")
+    else:
+        _wait_for(
+            sb,
+            lambda: bool(find_review_cards(sb)),
+            timeout=30,
+            label="review cards after Reviews tab click",
+        )
     return sb.get_current_url()
 
 
@@ -281,36 +428,94 @@ def find_review(sb, author: str = "", snippet: str = "") -> dict | None:
     return None
 
 
+_CLICK_REPLY_JS_TEMPLATE = """(function(){
+  var rid = %s;
+  var author = %s;
+  var cards = Array.from(document.querySelectorAll('div.jftiEf'));
+  if (!cards.length) cards = Array.from(document.querySelectorAll('div[data-review-id]'));
+  var card = null;
+  for (var i = 0; i < cards.length; i++) {
+    var r = cards[i].getAttribute('data-review-id') || '';
+    var aEl = cards[i].querySelector('div.d4r55');
+    var a = aEl ? aEl.textContent.trim() : '';
+    if (rid && r === rid) { card = cards[i]; break; }
+    if (!rid && author && a.toLowerCase().indexOf(author.toLowerCase()) !== -1) { card = cards[i]; break; }
+  }
+  if (!card) return false;
+  var b = card.querySelector("button[aria-label*='Reply'], button[aria-label*='Respond']");
+  if (!b) return false;
+  b.click();
+  return true;
+})();"""
+
+_HAS_REPLY_JS_TEMPLATE = """(function(){
+  var rid = %s;
+  var cards = Array.from(document.querySelectorAll('div.jftiEf'));
+  if (!cards.length) cards = Array.from(document.querySelectorAll('div[data-review-id]'));
+  for (var i = 0; i < cards.length; i++) {
+    var r = cards[i].getAttribute('data-review-id') || '';
+    if (r === rid) {
+      return !!cards[i].querySelector("button[aria-label*='Reply'], button[aria-label*='Respond']");
+    }
+  }
+  return false;
+})();"""
+
+
+def _review_rid(review: dict) -> str:
+    """The data-review-id for a review dict ('' when the key is a fallback)."""
+    key = review.get("review_key") or ""
+    return "" if "|" in key else key
+
+
+def _click_reply_button(sb, review: dict) -> bool:
+    """Click the Reply button of the matched review card.
+
+    Primary: JS click scoped to the card (CDP Elements have no working
+    .find_elements(), so the card cannot be queried as a WebElement).
+    Fallback: document-level sb.click on the card's Reply button.
+    Returns True if a click happened.
+    """
+    rid = _review_rid(review)
+    author = review.get("author") or ""
+    try:
+        if sb.execute_script(_CLICK_REPLY_JS_TEMPLATE % (json.dumps(rid), json.dumps(author))):
+            log("clicked Reply button via JS")
+            return True
+    except Exception as exc:
+        log(f"JS Reply click failed: {exc}")
+    if rid:
+        safe_rid = re.sub(r'["\\]', "", rid)
+        for sel in [
+            f"div.jftiEf[data-review-id=\"{safe_rid}\"] button[aria-label*='Reply']",
+            f"div.jftiEf[data-review-id=\"{safe_rid}\"] button[aria-label*='Respond']",
+        ]:
+            try:
+                sb.click(sel)
+                log(f"clicked Reply button via {sel}")
+                return True
+            except Exception:
+                continue
+    return False
+
+
 def reply_control_present(sb, review: dict) -> bool:
     """Check whether the owner Reply/Respond control exists for a review.
 
     Only meaningful when logged in as the business owner. On a public
     (logged-out) page this is False -- which is itself a useful signal.
+    Uses the has_reply_button flag from the JS extraction, with a JS
+    re-check by data-review-id as fallback.
     """
-    cards = find_review_cards(sb)
-    for card in cards:
-        try:
-            txt = card.text or ""
-            if review["author"] and review["author"] not in txt:
-                continue
-            for sel in [
-                "button[aria-label*='Reply']",
-                "button[aria-label*='Respond']",
-                "//button[contains(., 'Reply')]",
-            ]:
-                try:
-                    els = (
-                        card.find_elements("xpath", sel)
-                        if sel.startswith("//")
-                        else card.find_elements("css selector", sel)
-                    )
-                    if els:
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            continue
-    return False
+    if review.get("has_reply_button"):
+        return True
+    rid = _review_rid(review)
+    if not rid:
+        return False
+    try:
+        return bool(sb.execute_script(_HAS_REPLY_JS_TEMPLATE % json.dumps(rid)))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -486,37 +691,15 @@ def _cmd_post_reply_inner(sb, args) -> int:
     # NOTE: the task forbids live posting for now. This branch exists so
     # the worker is complete for the approved live test later; it is
     # never reached in dry-run mode.
+    #
+    # CDP Elements have no working .find_elements()/.send_keys(), so the
+    # card is targeted by data-review-id (JS click, sb.click fallback)
+    # and typing/posting use document-level sb.* methods.
     try:
-        cards = find_review_cards(sb)
-        target = None
-        for card in cards:
-            if review["author"] and review["author"] in (card.text or ""):
-                target = card
-                break
-        if target is None:
-            raise RuntimeError("review card disappeared before replying")
-        clicked = False
-        for sel in [
-            "button[aria-label*='Reply']",
-            "button[aria-label*='Respond']",
-            "//button[contains(., 'Reply')]",
-        ]:
-            try:
-                els = (
-                    target.find_elements("xpath", sel)
-                    if sel.startswith("//")
-                    else target.find_elements("css selector", sel)
-                )
-                if els:
-                    els[0].click()
-                    clicked = True
-                    break
-            except Exception:
-                continue
-        if not clicked:
+        if not _click_reply_button(sb, review):
             raise RuntimeError("Reply button could not be clicked")
         sb.sleep(1.5)
-        box = None
+        box_sel = None
         for sel in [
             "textarea[aria-label*='Reply']",
             "textarea[aria-label*='Respond']",
@@ -524,16 +707,14 @@ def _cmd_post_reply_inner(sb, args) -> int:
             "textarea",
         ]:
             try:
-                els = sb.find_elements(sel)
-                if els:
-                    box = els[0]
+                if sb.find_elements(sel):
+                    box_sel = sel
                     break
             except Exception:
                 continue
-        if box is None:
+        if box_sel is None:
             raise RuntimeError("reply text box did not appear")
-        box.click()
-        box.send_keys(args.reply_text)
+        sb.type(box_sel, args.reply_text)
         sb.sleep(1)
         posted = False
         for sel in [
@@ -557,6 +738,15 @@ def _cmd_post_reply_inner(sb, args) -> int:
         sb.refresh()
         sb.sleep(3)
         check = find_review(sb, author=args.review_author, snippet=args.review_snippet)
+        if not check:
+            # The refresh may have reset the panel to Overview; reopen
+            # the Reviews tab and look once more.
+            try:
+                sb.click("button[aria-label*='Reviews']")
+                sb.sleep(3)
+            except Exception:
+                pass
+            check = find_review(sb, author=args.review_author, snippet=args.review_snippet)
         verified = bool(
             check and args.reply_text[:60] in (check["text"] or "")
             or (check and check["has_owner_reply"])
