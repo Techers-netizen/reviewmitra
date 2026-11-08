@@ -36,9 +36,10 @@ export async function GET(req: NextRequest) {
     }
 
     if (!business) {
+      // Honest: no business exists yet — never a fabricated "My Business".
       return NextResponse.json({
         businessId: null,
-        businessName: "My Business",
+        businessName: null,
         businesses: [],
         connections: [],
         google: { connected: false, account: null, lastSyncAt: null },

@@ -89,10 +89,11 @@ export async function POST(req: NextRequest) {
             note: "Synced via Justdial Scraper",
           };
         } else {
+          // Honest: no Justdial URL configured, so nothing was synced.
           syncSummary.justdial = {
-            success: true,
+            success: false,
             newIngested: 0,
-            note: "Justdial listing connected.",
+            note: "No Justdial listing URL configured — nothing synced.",
           };
         }
       } else if (conn.platformName === "indiamart") {
@@ -100,10 +101,12 @@ export async function POST(req: NextRequest) {
           where: { id: conn.id },
           data: { lastSyncAt: new Date() },
         });
+        // Honest: no IndiaMART review fetch is implemented — nothing was
+        // pulled. Previously this reported success:true with 0 ingested.
         syncSummary.indiamart = {
-          success: true,
+          success: false,
           newIngested: 0,
-          note: "IndiaMART seller account synced.",
+          note: "IndiaMART review fetch is not implemented — no reviews pulled.",
         };
       }
     }

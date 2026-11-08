@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { postGoogleReplyToApi } from "@/lib/google-business";
 import { postMetaReplyToApi } from "@/lib/meta-business";
 import { detectReviewLanguage } from "@/lib/review-engine";
-import { enqueueWorkerJob, isWorkerTransportEnabled, workerBusinessUrl } from "@/lib/worker-queue";
+import { enqueueGoogleReply } from "@/lib/reply-service";
+import { isWorkerTransportEnabled } from "@/lib/worker-queue";
 
 // POST /api/reviews/reply
 // Body: { reviewId: string, replyText: string, tone?: string,
@@ -43,66 +44,31 @@ export async function POST(req: NextRequest) {
     const detectedLang = detectReviewLanguage(body.replyText);
     const dryRun = !!body.dryRun;
 
-    // --- Google via SeleniumBase worker ----------------------------------
+    // --- Google via SeleniumBase worker (shared path, see reply-service) ---
     if (review.platformName === "google" && isWorkerTransportEnabled()) {
-      if (dryRun) {
-        const job = enqueueWorkerJob({
-          type: "google_reply",
-          businessId: review.businessId,
-          reviewId: review.id,
-          externalReviewId: review.externalReviewId,
-          reviewerName: review.reviewerName,
-          reviewSnippet: (review.reviewText || "").slice(0, 120),
-          replyText: String(body.replyText).trim(),
-          businessUrl: workerBusinessUrl(review.business),
-          dryRun: true,
-          replyDbId: null,
-        });
-        return NextResponse.json({
-          ok: true,
-          jobId: job.id,
-          postStatus: "dry_run_queued",
-          languageUsed: detectedLang.code,
-          platform: "google",
-          note: "Dry-run job queued for the browser worker. Nothing will be typed or submitted.",
-        });
-      }
-
-      // Create the row FIRST so the worker result can update it, but keep it
-      // "queued": isReplied stays false until the worker verifies the post.
-      const reply = await db.reviewReply.create({
-        data: {
-          reviewId: review.id,
-          businessId: review.businessId,
-          replyText: String(body.replyText).trim(),
-          generatedByAi: !!body.generatedByAi,
-          aiToneUsed: body.tone || null,
-          languageUsed: detectedLang.code,
-          postStatus: "queued",
-        },
-      });
-      const job = enqueueWorkerJob({
-        type: "google_reply",
-        businessId: review.businessId,
+      const res = await enqueueGoogleReply({
         reviewId: review.id,
-        externalReviewId: review.externalReviewId,
-        reviewerName: review.reviewerName,
-        reviewSnippet: (review.reviewText || "").slice(0, 120),
         replyText: String(body.replyText).trim(),
-        businessUrl:
-          review.business.googleReviewUrl ||
-          "https://share.google/Rd7mruMQjwTihYs01",
-        dryRun: false,
-        replyDbId: reply.id,
+        generatedByAi: !!body.generatedByAi,
+        tone: body.tone || null,
+        dryRun,
       });
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.error || "Could not queue the reply." },
+          { status: 500 }
+        );
+      }
       return NextResponse.json({
         ok: true,
-        replyId: reply.id,
-        jobId: job.id,
-        postStatus: "queued",
+        replyId: res.replyId,
+        jobId: res.jobId,
+        postStatus: res.postStatus,
         languageUsed: detectedLang.code,
         platform: "google",
-        note: "Reply queued for the browser worker. It will show as posted only after the worker verifies it on Google Maps.",
+        note: dryRun
+          ? "Dry-run job queued for the browser worker. Nothing will be typed or submitted."
+          : "Reply queued for the browser worker. It will show as posted only after the worker verifies it on Google Maps.",
       });
     }
 

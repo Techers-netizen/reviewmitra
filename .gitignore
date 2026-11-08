@@ -75,3 +75,5 @@ downloaded_files/
 
 __pycache__/
 worker/*.png
+# persistent Chrome profile — contains a live Google login, never commit
+worker/profiles/

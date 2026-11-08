@@ -58,15 +58,10 @@ export async function GET(req: NextRequest) {
     }
 
     if (!business) {
+      // Honest: no business exists yet. The dashboard handles business:null
+      // (shows "Loading…" / empty inbox) — never a fabricated business.
       return NextResponse.json({
-        business: {
-          id: "",
-          name: "My Business",
-          category: "clinic",
-          phoneSupport: null,
-          defaultTone: "friendly",
-          matchReviewLanguage: true,
-        },
+        business: null,
         connections: [],
         subscription: null,
         reviews: [],

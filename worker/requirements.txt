@@ -1,1 +1,3 @@
 seleniumbase>=4.32
+fastapi>=0.110
+uvicorn[standard]>=0.29

@@ -19,9 +19,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 export default function QrBoosterPage() {
-  const [businessName, setBusinessName] = useState("My Business");
+  const [businessName, setBusinessName] = useState("");
   const [businessCity, setBusinessCity] = useState("");
-  const [businessId, setBusinessId] = useState("demo-business");
+  // Honest defaults: no fabricated "My Business" / "demo-business" —
+  // the real business loads from /api/connect/status on mount.
+  const [businessId, setBusinessId] = useState("");
   const [copied, setCopied] = useState(false);
 
   const [googlePlaceId, setGooglePlaceId] = useState("");

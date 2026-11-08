@@ -19,9 +19,20 @@ export function classifySentiment(rating: number): "positive" | "neutral" | "neg
 }
 
 /**
- * Ingests a batch of real reviews for a business platform, avoids duplicates,
- * detects customer review language, triggers same-language Agentic AI auto-reply,
- * and dispatches instant WhatsApp alerts for negative reviews.
+ * Ingests a batch of real reviews for a business platform, avoids duplicates
+ * (upsert by platform + externalReviewId), detects customer review language,
+ * and handles the 1-3★ safety path (draft + WhatsApp alert).
+ *
+ * HONESTY RULES (2026-11-09, Step 0):
+ * - Ingest NEVER marks a reply "posted" and NEVER sets isReplied=true.
+ *   Posting happens only through the shared worker /reply path
+ *   (POST /api/reviews/reply or the cron), which marks "posted" only after
+ *   the worker reads the reply back on Google Maps. The old code created a
+ *   ReviewReply with postStatus "posted" at ingest time for Google without
+ *   ever posting it — that false-success bug is deleted.
+ * - Auto-reply rule: 4-5★ only, posted by the cron via the worker path.
+ *   1-3★ stays as a draft + WhatsApp alert, for a human to review.
+ *   The old neutral (3★) auto-reply branch is deleted.
  */
 export async function ingestReviews(
   businessId: string,
@@ -40,7 +51,8 @@ export async function ingestReviews(
   const results = {
     inserted: 0,
     updated: 0,
-    autoReplied: 0,
+    autoReplied: 0, // kept for callers; ingest itself never auto-posts
+    draftsCreated: 0,
   };
 
   for (const raw of rawReviews) {
@@ -75,52 +87,12 @@ export async function ingestReviews(
       });
       results.inserted++;
 
-      // Check auto-reply rules (Positive 4-5★ or Neutral 3★)
-      const shouldAutoReply =
-        (sentiment === "positive" && business.autoReplyPositive) ||
-        (sentiment === "neutral" && business.autoReplyNeutral);
-
-      if (shouldAutoReply && raw.reviewText) {
-        try {
-          const generatedText = await generateAiReply(
-            {
-              reviewerName: raw.reviewerName,
-              rating: raw.rating,
-              reviewText: raw.reviewText,
-              businessName: business.businessName,
-              businessId: business.id,
-              category: business.category || "business",
-              phoneSupport: business.phoneSupport || undefined,
-              matchReviewLanguage: business.matchReviewLanguage,
-            },
-            business.defaultTone as any
-          );
-
-          await db.reviewReply.create({
-            data: {
-              reviewId: newReview.id,
-              businessId,
-              replyText: generatedText,
-              generatedByAi: true,
-              aiToneUsed: business.defaultTone,
-              languageUsed: detectedLang.code,
-              postStatus: platformName === "google" ? "posted" : "copied_to_clipboard",
-              isAutoReply: true,
-              isDraft: false,
-            },
-          });
-
-          await db.review.update({
-            where: { id: newReview.id },
-            data: { isReplied: true },
-          });
-
-          results.autoReplied++;
-        } catch (e) {
-          console.error("Auto-reply generation failed:", e);
-        }
-      } else if (sentiment === "negative" && business.notifyWhatsapp && business.notifyWhatsappNumber) {
-        // Draft an empathetic apology in the customer's language and send WhatsApp alert
+      // 1-3★ safety path: draft an empathetic reply in the customer's
+      // language and alert the owner on WhatsApp. The draft is created
+      // even when no WhatsApp number is configured; the alert only sends
+      // when one is. 4-5★ reviews get nothing here — the cron posts them
+      // via the shared worker /reply path.
+      if (sentiment !== "positive") {
         try {
           const draftApology = await generateAiReply(
             {
@@ -136,20 +108,39 @@ export async function ingestReviews(
             business.defaultTone as any
           );
 
-          await sendWhatsAppNotification({
-            toPhoneNumber: business.notifyWhatsappNumber,
-            templateType: "negative_alert",
+          await db.reviewReply.create({
             data: {
-              businessName: business.businessName,
-              reviewerName: raw.reviewerName,
-              rating: raw.rating,
-              platform: platformName,
-              reviewText: raw.reviewText,
-              draftReply: draftApology,
+              reviewId: newReview.id,
+              businessId,
+              replyText: draftApology,
+              generatedByAi: true,
+              aiToneUsed: business.defaultTone,
+              languageUsed: detectedLang.code,
+              postStatus: "draft",
+              isAutoReply: false,
+              isDraft: true,
             },
           });
-        } catch (waErr) {
-          console.warn("Negative review WhatsApp alert failed:", waErr);
+          results.draftsCreated++;
+
+          if (business.notifyWhatsapp && business.notifyWhatsappNumber) {
+            await sendWhatsAppNotification({
+              toPhoneNumber: business.notifyWhatsappNumber,
+              templateType: "negative_alert",
+              data: {
+                businessName: business.businessName,
+                reviewerName: raw.reviewerName,
+                rating: raw.rating,
+                platform: platformName,
+                reviewText: raw.reviewText,
+                draftReply: draftApology,
+              },
+            }).catch((waErr) => {
+              console.warn("Negative review WhatsApp alert failed:", waErr);
+            });
+          }
+        } catch (e) {
+          console.error("1-3★ draft creation failed:", e);
         }
       }
     }

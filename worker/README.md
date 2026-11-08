@@ -1,34 +1,96 @@
-# ReviewMitra Google Maps worker (SeleniumBase, UC mode)
+# ReviewMitra Google Maps Worker (SeleniumBase, no GBP API)
 
-Posts Google Maps review replies from the ReviewMitra dashboard **without the
-official GBP API**, by driving a real Chrome logged in as the business owner.
+Fetches real Google Maps reviews and posts owner replies **without the
+Google Business Profile API** (its quota is 0). A real Chrome in
+SeleniumBase UC mode opens the business page, reads the reviews, and —
+when logged in as the owner — posts replies and reads them back.
 
 ## How it works
 
 ```
-Dashboard "Post Reply"
-  -> POST /api/reviews/reply            (creates a ReviewReply row, status "queued")
-  -> writes worker/jobs/job_<id>.json   (src/lib/worker-queue.ts)
-  -> run_worker.py polls jobs/          (every 10s)
-  -> gmaps_worker.py (SeleniumBase UC)  opens Google Maps with the stored
-     Chrome profile, finds the review, posts the reply, READS IT BACK
-  -> POST /api/worker/jobs/<id>/result  updates the DB row:
-     verified on page  -> postStatus "posted", review.isReplied = true
-     anything else     -> postStatus "failed" + error surfaced to the dashboard
+Dashboard / cron (Next.js, Vercel)
+        │  WORKER_URL + X-Worker-Secret
+        ▼
+FastAPI service (worker/app.py) ── one Chrome at a time
+        │  SeleniumBase UC mode, persistent profile
+        ▼
+Google Maps (business page, Reviews tab, owner view)
+
+Dashboard "Post Reply" also works via the file queue (local only):
+  POST /api/reviews/reply -> worker/jobs/job_<id>.json
+  -> run_worker.py polls jobs/ (every 10s) -> gmaps_worker.py CLI
+  -> POST /api/worker/jobs/<id>/result
 ```
 
-A reply is **only** recorded as `posted` when the worker reads it back on the
-page. Failed replies are recorded as `failed` -- the old false-"posted" bug
-is fixed in `src/app/api/reviews/reply/route.ts`.
+- `POST /sync` — resolve a Maps link, read business name/rating/total
+  from the page, open Reviews (Newest), scroll until no new items load,
+  expand every "More", capture ALL reviews. Returns business + reviews
+  with a completeness check (fetched vs total shown, >= 95% = complete).
+- `POST /reply` — find the exact review, click Reply, type, submit,
+  reload and VERIFY the reply is visible. Only then `posted: true`.
+- The Next.js app calls the service via `WORKER_URL` (see
+  `src/lib/worker-http.ts` and `POST /api/worker/sync`). Dashboard replies
+  (manual button + auto-reply cron) use the same shared path
+  (`src/lib/reply-service.ts`) and the same honesty rule: a reply is
+  "posted" only after the worker reads it back on the page.
 
-## Setup
+## Run the FastAPI service locally (this machine)
+
+```bash
+# 1. Create the venv and install deps (once)
+python3 -m venv worker/.venv
+worker/.venv/bin/pip install -r worker/requirements.txt
+
+# 2. Start the service (WORKER_SECRET is mandatory — it refuses to start without it)
+WORKER_SECRET='<a-long-random-secret>' \
+  worker/.venv/bin/uvicorn worker.app:app --port 8000
+
+# 3. Test (logged-out: public reviews only)
+curl -s -X POST localhost:8000/sync \
+  -H 'X-Worker-Secret: <secret>' -H 'Content-Type: application/json' \
+  -d '{"mapsUrl": "https://share.google/Rd7mruMQjwTihYs01"}' | python3 -m json.tool
+```
+
+## Run in Docker (local now, VPS later)
+
+```bash
+docker build -f worker/Dockerfile -t reviewmitra-worker .
+docker run -d --name reviewmitra-worker -p 8000:8000 \
+  -e WORKER_SECRET='<a-long-random-secret>' \
+  -v reviewmitra-profile:/app/worker/profiles \
+  reviewmitra-worker
+```
+
+On a VPS the same image runs with `-p 8000:8000` behind a firewall that
+only allows the Vercel app's calls (or a reverse proxy with the secret
+header). Set `WORKER_URL=https://<vps-host>:8000` in Vercel.
+
+## The one-time owner login (required for the full sync + replies)
+
+The worker **never sees or types the owner's password**.
+
+1. Start the service with a persistent profile dir:
+   `WORKER_PROFILE_DIR=/path/to/profile` (default
+   `worker/profiles/google-owner`).
+2. The owner signs in once in a headed Chrome using that profile: the
+   worker types the **email only** and waits; the owner types their
+   password and completes 2FA on their phone (tap **Yes + the number**
+   shown). The session is saved to the profile.
+3. From then on the worker reuses the profile — no password, no tap.
+
+Until that profile exists:
+- `/sync` works **logged-out** but Google shows only 5 reviews of 942
+  (no lazy-load on scroll) — the response reports completeness honestly
+  (e.g. 5/942 = 0.5%, `complete: false`).
+- `/reply` honestly reports `posted: false, error: "no Reply control
+  found — are we logged in as the business owner?"`.
+
+## Setup (venv + poller)
 
 ```bash
 cd <repo>
 python3 -m venv worker/.venv
 worker/.venv/bin/pip install -r worker/requirements.txt
-# UC mode downloads its own ChromeDriver on first run; a system Chrome is
-# NOT required. First run needs internet access.
 cp worker/config.example.json worker/config.json
 # edit worker/config.json -> set "profile_dir" to the captured Chrome profile
 ```
@@ -46,13 +108,16 @@ profile for the Google account that manages the business
 4. Make sure Chrome is NOT running with that profile when the worker starts
    (Chrome locks the profile while running).
 
-## Running
+## Running the poller (file-queue path)
 
 ```bash
 # Poller (processes queued jobs continuously)
 worker/.venv/bin/python worker/run_worker.py
 
 # One-shot manual runs (no job queue)
+worker/.venv/bin/python worker/gmaps_worker.py sync \
+  --business-url https://share.google/Rd7mruMQjwTihYs01 --headless
+
 worker/.venv/bin/python worker/gmaps_worker.py list-reviews \
   --business-url https://share.google/Rd7mruMQjwTihYs01 --headless
 
@@ -76,8 +141,9 @@ interception with its own CA, which Chrome's NSS store does not trust
 
 1. **`worker/local_proxy.py`** — a stdlib-only forwarder on
    `127.0.0.1:8899` that adds the `Proxy-Authorization` header itself.
-   `run_worker.py` starts it automatically; for manual runs, start it first
-   and export `REVIEWMITRA_LOCAL_PROXY=http://127.0.0.1:8899`. The upstream
+   `run_worker.py` and `worker/app.py` start it automatically; for manual
+   runs, start it first and export
+   `REVIEWMITRA_LOCAL_PROXY=http://127.0.0.1:8899`. The upstream
    credential is read from the environment and never logged or written down.
 2. **`--ignore-certificate-errors`** is passed to Chrome (test/dev only).
 3. The proxy's TLS interception breaks Chrome's TLS 1.3, so the worker
@@ -129,17 +195,11 @@ End-to-end plumbing verified on localhost:3000 with
   VM). The live reply path (JS click on the card's Reply button,
   `sb.type` / `sb.click` for the box and Post) is written for that
   session but cannot be verified until it exists.
-- **Database is unreachable from this VM.** Direct Postgres connections
-  are denied by the assistant's network policy: the connection is
-  answered with "Database connections is turned off for this assistant.
-  To allow it, ask the user to open Muse settings -> Permissions ->
-  Direct network protocols and switch databases from Deny to Ask."
-  So the DB-backed part of the local test (seed a test business/review,
-  POST /api/reviews/reply, watch the ReviewReply row go queued ->
-  failed/posted) could NOT run here. `worker/test-seed.mjs` /
-  `worker/test-cleanup.mjs` are provided for that test once DB access
-  is allowed. The deployed Vercel app is unaffected (it reaches Neon
-  from Vercel's network, not this VM).
+- **Database from this VM:** direct Postgres is blocked by the egress
+  proxy (TLS to Neon fails); DB checks use Neon's HTTP SQL endpoint
+  instead (see `/tmp/neon-db-check.py`, token passed via stdin only).
+  The deployed Vercel app is unaffected (it reaches Neon from Vercel's
+  network, not this VM).
 
 ## Gotchas fixed during the build
 
@@ -147,7 +207,7 @@ End-to-end plumbing verified on localhost:3000 with
   block (it records the failure and returns normally, exit code 0),
   so a fatal error produced no JSON result. The `try/except` that
   emits the JSON result must be *inside* the `with` block -- see
-  `cmd_list_reviews` / `cmd_post_reply` in `gmaps_worker.py`.
+  `cmd_list_reviews` / `cmd_post_reply` / `cmd_sync` in `gmaps_worker.py`.
 - **Route nesting:** `POST /api/worker/jobs/<id>/result` needs its own
   folder `src/app/api/worker/jobs/[id]/result/route.ts`; a `route.ts`
   in `[id]/` only matches `/api/worker/jobs/<id>` (the first version
@@ -165,11 +225,42 @@ End-to-end plumbing verified on localhost:3000 with
 | `poll_interval_seconds` | how often the poller checks jobs/ |
 | `app_base_url` | Next.js app, for reporting job results back |
 
+## Environment variables
+
+| Var | Purpose |
+| --- | --- |
+| `WORKER_SECRET` | **Required.** Secret for `X-Worker-Secret` / `Authorization: Bearer`. |
+| `WORKER_PROFILE_DIR` | Persistent Chrome profile (default `worker/profiles/google-owner`). |
+| `WORKER_HEADLESS` | `true` (default) / `false` for headed runs (login only). |
+| `WORKER_URL` | (Next.js side) Base URL of this service, e.g. `http://localhost:8000`. |
+| `GOOGLE_REPLY_TRANSPORT` | (Next.js side) `worker` to route Google replies via this worker. |
+| `REVIEWMITRA_LOCAL_PROXY` | (This VM only) local forwarder for the egress proxy; auto-started. |
+
+## Selectors
+
+All Google Maps selectors live in **one file**: `worker/gmaps_selectors.py`.
+If Google's layout changes, fix them there — the CLI, the FastAPI
+service and the poller all pick them up. Never scatter selectors.
+
+## Files
+
+| File | Purpose |
+| --- | --- |
+| `worker/gmaps_worker.py` | SeleniumBase driver: sync / list-reviews / post-reply (CLI + importable). |
+| `worker/gmaps_selectors.py` | The one selector config. |
+| `worker/app.py` | FastAPI service (`POST /sync`, `POST /reply`, `GET /health`). |
+| `worker/run_worker.py` | File-queue poller for dashboard reply jobs (CLI path). |
+| `worker/local_proxy.py` | Local forwarder for this VM's authenticated egress proxy. |
+| `worker/Dockerfile` | Container image for local Docker / VPS. |
+| `worker/.chrome/` | Chrome-for-Testing binary downloaded by SeleniumBase (gitignored). |
+| `worker/profiles/` | Persistent Chrome profiles (gitignored — contains a live login). |
+| `worker/jobs/` | File-queue job JSONs (gitignored). |
+
 ## Notes / risks
 
-- Google Maps DOM selectors change often; `gmaps_worker.py` tries several
-  selector strategies and logs what it finds. If extraction returns 0
-  reviews, update `REVIEW_CARD_SELECTORS` / `TEXT_SELECTORS`.
+- Google Maps DOM selectors change often; they live in
+  `worker/gmaps_selectors.py` — if extraction returns 0 reviews, update them
+  there, not in the worker code.
 - Browser automation against Google's ToS carries account risk; use the
   business owner's own account, keep the volume low, and never run it
   against accounts you don't own.

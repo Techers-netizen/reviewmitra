@@ -4,23 +4,36 @@ What this does
 ---------------
 Drives a real Chrome (UC mode) using an EXISTING logged-in Chrome profile
 directory, so the Google account that manages the business (publicdocc@gmail.com
-for New Lucky Restaurant) is already signed in. This worker NEVER logs in:
-no password, no OTP handling, no account creation. The profile directory is
-captured separately (browser task) and passed in via --profile-dir / config.
+for New Lucky Restaurant) is already signed in. This worker NEVER logs in by
+itself and never types a password: the one-time login is done by the owner
+(worker types the email only, the owner taps Yes + the number on their phone,
+the session is saved to the persistent profile — see worker/README.md).
 
-Modes
------
-* list-reviews : open the business Maps page, list its reviews (author,
-  rating, text, date, review key). Read-only, never posts.
-* post-reply   : find one review (by author and/or text snippet), click its
-  Reply button, type the reply, and -- unless --dry-run -- submit it, then
-  READ THE REPLY BACK from the page and only report success when the reply
-  text is actually visible under the review. In dry-run mode it types
-  nothing and submits nothing; it only reports whether the Reply control
-  exists and the review was found.
+All Google Maps selectors live in worker/gmaps_selectors.py (ONE config file).
+If Google's layout changes, fix them there.
+
+Modes (CLI)
+-----------
+* sync        : resolve a Maps link, read business name/rating/total from
+                the page, open Reviews (Newest), scroll until no new items
+                load, expand every "More", capture ALL reviews, and print
+                {business, reviews, fetchedCount, totalReviewsShown,
+                completenessPct} as JSON. Never pads, never invents.
+* list-reviews: open the business Maps page, list its reviews (read-only).
+* post-reply  : find one review, click Reply, type, submit, then READ THE
+                REPLY BACK from the page and only report success when the
+                reply text is actually visible under the review. In dry-run
+                mode it types nothing and submits nothing.
+
+The same functions are imported by worker/app.py (FastAPI service), so the
+CLI and the HTTP service can never drift apart.
 
 Usage (from the Reviewmitra repo root)
 --------------------------------------
+  worker/.venv/bin/python worker/gmaps_worker.py sync \
+      --business-url https://share.google/Rd7mruMQjwTihYs01 \
+      --profile-dir /path/to/chrome-profile --headless
+
   worker/.venv/bin/python worker/gmaps_worker.py list-reviews \
       --business-url https://share.google/Rd7mruMQjwTihYs01 \
       --profile-dir /path/to/chrome-profile --headless
@@ -38,11 +51,16 @@ Exit code 1 = failure; details are printed as JSON on stdout.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import random
 import re
 import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gmaps_selectors as SEL  # noqa: E402  (single source of truth for Maps selectors)
 
 # ---------------------------------------------------------------------------
 # Logging: every step goes to stderr (human log) AND the JSON result on
@@ -74,65 +92,22 @@ def emit(payload: dict) -> None:
 # sb.type work fine.
 # ---------------------------------------------------------------------------
 
-# A review card on the Maps Reviews tab (verified 2026-11-08):
-#   div.jftiEf[data-review-id] -- the full card (author div.d4r55,
-#   text span.wiI7pd, date span.rsqaWe, rating span.kvMYJc[aria-label]).
-# div[data-review-id] also matches inner duplicate divs (same rid), so
-# extraction dedupes by rid and prefers div.jftiEf.
-REVIEW_CARD_SELECTORS = [
-    "div.jftiEf",
-    "div[data-review-id]",
-]
+_EXTRACT_JS = SEL.extract_reviews_js()
+_SCROLL_JS = SEL.SCROLL_PANEL_JS
+_EXPAND_JS = SEL.EXPAND_MORE_JS
+_COUNT_JS = SEL.COUNT_CARDS_JS
+_BUSINESS_INFO_JS = SEL.BUSINESS_INFO_JS
 
-_EXTRACT_JS = """(function(){
-  var cards = Array.from(document.querySelectorAll('div.jftiEf'));
-  if (!cards.length) cards = Array.from(document.querySelectorAll('div[data-review-id]'));
-  var seen = {};
-  var out = [];
-  cards.forEach(function(card, idx){
-    var rid = card.getAttribute('data-review-id') || '';
-    if (!rid) {
-      var inner = card.querySelector('[data-review-id]');
-      if (inner) rid = inner.getAttribute('data-review-id') || '';
-    }
-    var authorEl = card.querySelector('div.d4r55');
-    var textEl = card.querySelector('span.wiI7pd');
-    var dateEl = card.querySelector('span.rsqaWe');
-    var ratingEl = card.querySelector('span.kvMYJc[aria-label]');
-    var rating = null;
-    if (ratingEl) {
-      var m = /(\\d)\\s*star/.exec(ratingEl.getAttribute('aria-label') || '');
-      if (m) rating = parseInt(m[1], 10);
-    }
-    var txt = textEl ? textEl.textContent.trim() : '';
-    var auth = authorEl ? authorEl.textContent.trim() : '';
-    var dt = dateEl ? dateEl.textContent.trim() : '';
-    var key = rid || (auth + '|' + dt + '|' + txt.slice(0, 60));
-    if (!key || seen[key]) return;
-    if (!auth && !txt) return;
-    seen[key] = true;
-    var replyBtn = card.querySelector("button[aria-label*='Reply'], button[aria-label*='Respond']");
-    out.push({
-      review_key: key,
-      author: auth,
-      rating: rating,
-      text: txt,
-      date: dt,
-      has_owner_reply: (card.textContent || '').indexOf('Response from the owner') !== -1,
-      has_reply_button: !!replyBtn,
-      card_index: idx
-    });
-  });
-  return out;
-})();"""
 
-_SCROLL_JS = """(function(){
-  var els = document.querySelectorAll('div.m6QErb.DxyBCb.kA9KIf.dS8AEf');
-  if (!els.length) return -1;
-  var el = els[els.length - 1];
-  el.scrollTop = el.scrollHeight;
-  return el.scrollTop;
-})();"""
+def stable_external_id(reviewer_name: str, date_text: str, text: str) -> str:
+    """Stable dedupe key: sha256 of reviewerName + date text + review text.
+
+    The same review always maps to the same id across re-syncs, so a
+    re-sync upserts instead of duplicating. Prefixed so worker-synced
+    reviews are distinguishable from legacy ids (gp_, gpn_, gmap_ld_).
+    """
+    raw = "|".join([reviewer_name or "", date_text or "", text or ""])
+    return "gmaps_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
 def _extract_reviews_js(sb) -> list[dict]:
@@ -150,6 +125,85 @@ def _text(el) -> str:
         return (el.text or "").strip()
     except Exception:
         return ""
+
+
+def _random_delay(lo: float = 1.0, hi: float = 2.5) -> float:
+    """Human-like pause between scrolls (Google blocks metronomic bots)."""
+    d = random.uniform(lo, hi)
+    time.sleep(d)
+    return d
+
+
+def get_business_info(sb) -> dict:
+    """Read business name / address / rating / total review count / placeId
+    FROM THE PAGE (never typed, never guessed). Returns the raw values;
+    missing fields are None."""
+    try:
+        info = sb.execute_script(_BUSINESS_INFO_JS) or {}
+    except Exception as exc:
+        log(f"business-info extraction failed: {exc}")
+        info = {}
+    # The Maps app rewrites the place URL as it boots (the !16s/g/...
+    # kgmid segment can appear/disappear), so window.location.href
+    # inside the JS is not always the URL the driver reports. Extract
+    # the placeId from the driver's URL too (Python regex, verified).
+    if not info.get("placeId"):
+        try:
+            cur = sb.get_current_url() or ""
+            m = re.search(r"ChIJ[a-zA-Z0-9_-]{18,40}", cur)
+            if m:
+                info["placeId"] = m.group(0)
+            else:
+                km = re.search(r"/g/([a-zA-Z0-9_]{6,40})", cur)
+                if km:
+                    info["placeId"] = "/g/" + km.group(1)
+            if info.get("placeId"):
+                log(f"placeId from driver URL: {info['placeId']}")
+        except Exception:
+            pass
+    return {
+        "name": info.get("name"),
+        "address": info.get("address"),
+        "rating": info.get("rating"),
+        "totalReviewsShown": info.get("totalReviewsShown"),
+        "placeId": info.get("placeId"),
+    }
+
+
+def sort_reviews_newest(sb) -> bool:
+    """Try to set the Reviews sort to Newest. Best-effort: the owner view
+    usually already defaults to Newest. Returns True if a Newest option
+    was clicked (or was already active)."""
+    try:
+        # Open the sort menu (button showing the current sort / "Sort").
+        for label in ("Most relevant", "Sort"):
+            try:
+                sb.click_xpath(f"//button[contains(., '{label}')]")
+                sb.sleep(1.0)
+                break
+            except Exception:
+                continue
+        # Click "Newest" in the menu, if it appears.
+        try:
+            sb.click_xpath("//*[contains(text(), 'Newest')]")
+            sb.sleep(1.5)
+            log("sort set to Newest")
+            return True
+        except Exception:
+            pass
+        log("sort menu: 'Newest' option not found (page may already sort Newest)")
+        return False
+    except Exception as exc:
+        log(f"sort-to-Newest failed (continuing): {exc}")
+        return False
+
+
+def expand_all_more(sb) -> int:
+    """Click every 'More' (expand long text) and 'More Reviews' button."""
+    try:
+        return int(sb.execute_script(_EXPAND_JS) or 0)
+    except Exception:
+        return 0
 
 
 def extract_reviews(sb, max_reviews: int = 50) -> list[dict]:
@@ -184,6 +238,117 @@ def extract_reviews(sb, max_reviews: int = 50) -> list[dict]:
             pass
         sb.sleep(1.5)
     return reviews[:max_reviews]
+
+
+def sync_reviews(sb, maps_url: str, max_rounds: int = 80) -> dict:
+    """Full sync for one Maps link (the POST /sync implementation).
+
+    Resolves the link, reads business info from the page, opens Reviews,
+    sorts Newest, scrolls the panel until no new items load (human-like
+    random delays), expands every 'More', and captures ALL reviews.
+    Returns {business, reviews, fetchedCount, totalReviewsShown,
+    completenessPct, complete} where complete is True only when
+    fetched >= 95% of the total Google shows. Never pads, never invents:
+    when Google shows fewer reviews than the total (e.g. logged-out it
+    shows only 5 of 942), fetchedCount stays small and complete is False
+    with the exact numbers.
+    """
+    final_url = open_business_reviews(sb, maps_url, open_tab=False)
+    # Read business info from the PLACE OVERVIEW first: once the Reviews
+    # tab opens, the name/address header is replaced by the reviews list
+    # (the first h1 on the page then reads "Results").
+    info = get_business_info(sb)
+    log(f"business on page: {info}")
+    open_reviews_tab(sb)
+
+    sort_reviews_newest(sb)
+
+    reviews: list[dict] = []
+    seen: set[str] = set()
+    prev_count = -1
+    stable_rounds = 0
+    for round_no in range(max_rounds):
+        expand_all_more(sb)
+        for r in _extract_reviews_js(sb):
+            key = r.get("review_key") or ""
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ext_id = stable_external_id(r.get("author") or "", r.get("date") or "", r.get("text") or "")
+            reviews.append(
+                {
+                    "externalId": ext_id,
+                    "reviewerName": r.get("author") or "",
+                    "rating": r.get("rating"),
+                    "text": r.get("text") or "",
+                    "dateText": r.get("date") or "",
+                    "ownerReply": None,  # owner reply text is not exposed in the card JS; has_owner_reply flags it
+                    "hasOwnerReply": bool(r.get("has_owner_reply")),
+                    "hasReplyButton": bool(r.get("has_reply_button")),
+                    "review_key": key,
+                }
+            )
+        if len(reviews) == prev_count:
+            stable_rounds += 1
+            if stable_rounds >= 3:
+                log(f"scroll stable after {round_no + 1} rounds ({len(reviews)} reviews)")
+                break
+        else:
+            stable_rounds = 0
+        prev_count = len(reviews)
+        try:
+            sb.execute_script(_SCROLL_JS)
+        except Exception:
+            pass
+        _random_delay(1.0, 2.5)
+
+    # One last expand + extract pass so long texts are complete.
+    expand_all_more(sb)
+    sb.sleep(1.0)
+    for r in _extract_reviews_js(sb):
+        key = r.get("review_key") or ""
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        reviews.append(
+            {
+                "externalId": stable_external_id(r.get("author") or "", r.get("date") or "", r.get("text") or ""),
+                "reviewerName": r.get("author") or "",
+                "rating": r.get("rating"),
+                "text": r.get("text") or "",
+                "dateText": r.get("date") or "",
+                "ownerReply": None,
+                "hasOwnerReply": bool(r.get("has_owner_reply")),
+                "hasReplyButton": bool(r.get("has_reply_button")),
+                "review_key": key,
+            }
+        )
+
+    # Refresh business info (total count is most reliable after load).
+    info2 = get_business_info(sb)
+    for k, v in info2.items():
+        if v is not None:
+            info[k] = v
+
+    total = info.get("totalReviewsShown")
+    fetched = len(reviews)
+    completeness = (fetched / total * 100.0) if total else None
+    complete = bool(total) and fetched >= 0.95 * total
+    return {
+        "business": {
+            "name": info.get("name"),
+            "address": info.get("address"),
+            "rating": info.get("rating"),
+            "totalReviewsShown": total,
+            "placeId": info.get("placeId"),
+        },
+        "reviews": reviews,
+        "fetchedCount": fetched,
+        "totalReviewsShown": total,
+        "completenessPct": round(completeness, 1) if completeness is not None else None,
+        "complete": complete,
+        "place_url": final_url,
+    }
 
 
 def find_review_cards(sb):
@@ -248,9 +413,41 @@ def _query_from_search_url(url: str) -> str:
     return unquote(path.split(marker, 1)[1].split("/")[0]).strip()
 
 
-def open_business_reviews(sb, business_url: str) -> str:
-    """Open the business page, land on its place page, then open its Reviews
-    tab. Returns the final URL.
+def open_reviews_tab(sb) -> bool:
+    """Click the "Reviews" tab and wait for review cards. Returns True if
+    the tab was clicked. The list loads via RPC after the click and is
+    empty for several seconds."""
+    clicked_tab = False
+    for sel in SEL.REVIEWS_TAB:
+        try:
+            if sel.startswith("//"):
+                sb.click_xpath(sel)
+            else:
+                sb.click(sel)
+            clicked_tab = True
+            log(f"clicked Reviews tab via {sel}")
+            break
+        except Exception:
+            continue
+    if not clicked_tab:
+        log("WARNING: Reviews tab not found; continuing on the current panel")
+    else:
+        _wait_for(
+            sb,
+            lambda: bool(find_review_cards(sb)),
+            timeout=30,
+            label="review cards after Reviews tab click",
+        )
+    return clicked_tab
+
+
+def open_business_reviews(sb, business_url: str, open_tab: bool = True) -> str:
+    """Open the business page and land on its place page, then (unless
+    open_tab=False) open its Reviews tab. Returns the final URL.
+
+    Pass open_tab=False when the caller needs to read business
+    info from the place overview first (the name/address header is
+    replaced by the reviews list once the tab is open).
 
     Google Maps is heavy and some of its subresource hosts are blocked by
     this VM's egress proxy, so a full page-load wait can hang: cap the load
@@ -295,13 +492,33 @@ def open_business_reviews(sb, business_url: str) -> str:
         # must cope when given a share link directly, e.g. manual runs).
         url = sb.get_current_url()
         if "/maps/" not in url and "/search" in url:
-            from urllib.parse import parse_qs, urlparse
+            from urllib.parse import parse_qs, quote, urlparse
 
-            q = parse_qs(urlparse(url).query).get("q", [""])[0]
+            qs = parse_qs(urlparse(url).query)
+            q = qs.get("q", [""])[0]
+            kgmid = qs.get("kgmid", [""])[0]
+            # Wait for the Search page title to settle: it is more
+            # specific than the bare q param ("New Lucky Restaurant
+            # Mumbai", not just the name) when Google recognises the
+            # local query — but it is set a beat after load, so a
+            # bare title read here once produced a bare, ambiguous
+            # query that matched the wrong businesses.
+            title_query = ""
+            for _ in range(15):
+                title_query = (sb.get_title() or "").replace(" - Google Search", "").strip()
+                if q and q.lower() in title_query.lower():
+                    break
+                sb.sleep(1.0)
+            log(f"search page: q={q!r} title={title_query!r} kgmid={kgmid!r}")
+            # NOTE: the redirect's kgmid (/g/...) pins the exact
+            # business, but the Maps place URL built from it
+            # (data=!4m2!3m1!1s/g/...) does NOT resolve to the place
+            # header (30s wait, verified 2026-11-09), so it is NOT
+            # used for navigation. The kgmid is still recorded as the
+            # placeId when it appears in the final place URL.
             # The Search page title is more specific than the bare q
             # param: "New Lucky Restaurant Mumbai", not just the name.
             # Prefer it when it contains q (same business + location).
-            title_query = (sb.get_title() or "").replace(" - Google Search", "").strip()
             if title_query and q and q.lower() in title_query.lower():
                 query = title_query
             else:
@@ -316,7 +533,7 @@ def open_business_reviews(sb, business_url: str) -> str:
         landed = _wait_for(
             sb,
             lambda: _url_is_place(sb.get_current_url())
-            or bool(sb.find_elements("a.hfpxzc")),
+            or bool(sb.find_elements(SEL.SEARCH_RESULT_LINK)),
             timeout=30,
             label="place page or search results",
         )
@@ -333,11 +550,7 @@ def open_business_reviews(sb, business_url: str) -> str:
         raise RuntimeError(f"business page failed to load: {url}")
 
     # Dismiss a Google consent dialog if one appears.
-    for sel in [
-        "//button[contains(., 'Accept all')]",
-        "//button[contains(., 'Reject all')]",
-        "//button[contains(., 'I agree')]",
-    ]:
+    for sel in SEL.CONSENT_BUTTONS:
         try:
             sb.click_xpath(sel)
             log(f"dismissed consent dialog via {sel}")
@@ -355,7 +568,7 @@ def open_business_reviews(sb, business_url: str) -> str:
     if "/maps/search" in sb.get_current_url():
         clicked = False
         try:
-            results = sb.find_elements("a.hfpxzc[aria-label]") or []
+            results = sb.find_elements(SEL.SEARCH_RESULT_LINK) or []
         except Exception:
             results = []
         names = []
@@ -386,33 +599,10 @@ def open_business_reviews(sb, business_url: str) -> str:
         url = sb.get_current_url()
         log(f"place URL after result click: {url}")
 
-    # Click the "Reviews" tab if present, then wait for review cards: the
-    # list loads via RPC after the click and is empty for several seconds.
-    clicked_tab = False
-    for sel in [
-        "button[aria-label*='Reviews']",
-        "button[data-tab-index='1']",
-        "//button[contains(., 'Reviews')]",
-    ]:
-        try:
-            if sel.startswith("//"):
-                sb.click_xpath(sel)
-            else:
-                sb.click(sel)
-            clicked_tab = True
-            log(f"clicked Reviews tab via {sel}")
-            break
-        except Exception:
-            continue
-    if not clicked_tab:
-        log("WARNING: Reviews tab not found; continuing on the current panel")
-    else:
-        _wait_for(
-            sb,
-            lambda: bool(find_review_cards(sb)),
-            timeout=30,
-            label="review cards after Reviews tab click",
-        )
+    # Click the "Reviews" tab if asked (callers that read business info
+    # first do it themselves via open_reviews_tab()).
+    if open_tab:
+        open_reviews_tab(sb)
     return sb.get_current_url()
 
 
@@ -431,41 +621,26 @@ def find_review(sb, author: str = "", snippet: str = "") -> dict | None:
 _CLICK_REPLY_JS_TEMPLATE = """(function(){
   var rid = %s;
   var author = %s;
-  var cards = Array.from(document.querySelectorAll('div.jftiEf'));
-  if (!cards.length) cards = Array.from(document.querySelectorAll('div[data-review-id]'));
+  var cards = Array.from(document.querySelectorAll('%s'));
+  if (!cards.length) cards = Array.from(document.querySelectorAll('%s'));
   var card = null;
   for (var i = 0; i < cards.length; i++) {
     var r = cards[i].getAttribute('data-review-id') || '';
-    var aEl = cards[i].querySelector('div.d4r55');
+    var aEl = cards[i].querySelector('%s');
     var a = aEl ? aEl.textContent.trim() : '';
     if (rid && r === rid) { card = cards[i]; break; }
     if (!rid && author && a.toLowerCase().indexOf(author.toLowerCase()) !== -1) { card = cards[i]; break; }
   }
   if (!card) return false;
-  var b = card.querySelector("button[aria-label*='Reply'], button[aria-label*='Respond']");
+  var b = card.querySelector("%s");
   if (!b) return false;
   b.click();
   return true;
-})();"""
-
-_HAS_REPLY_JS_TEMPLATE = """(function(){
-  var rid = %s;
-  var cards = Array.from(document.querySelectorAll('div.jftiEf'));
-  if (!cards.length) cards = Array.from(document.querySelectorAll('div[data-review-id]'));
-  for (var i = 0; i < cards.length; i++) {
-    var r = cards[i].getAttribute('data-review-id') || '';
-    if (r === rid) {
-      return !!cards[i].querySelector("button[aria-label*='Reply'], button[aria-label*='Respond']");
-    }
-  }
-  return false;
-})();"""
-
-
-def _review_rid(review: dict) -> str:
-    """The data-review-id for a review dict ('' when the key is a fallback)."""
-    key = review.get("review_key") or ""
-    return "" if "|" in key else key
+})();""" % (
+    "%s", "%s",
+    SEL.REVIEW_CARD, SEL.REVIEW_CARD_FALLBACK, SEL.REVIEW_AUTHOR,
+    SEL.REVIEW_REPLY_BUTTON,
+)
 
 
 def _click_reply_button(sb, review: dict) -> bool:
@@ -513,9 +688,31 @@ def reply_control_present(sb, review: dict) -> bool:
     if not rid:
         return False
     try:
-        return bool(sb.execute_script(_HAS_REPLY_JS_TEMPLATE % json.dumps(rid)))
+        return bool(
+            sb.execute_script(
+                """(function(){
+  var rid = %s;
+  var cards = Array.from(document.querySelectorAll('%s'));
+  if (!cards.length) cards = Array.from(document.querySelectorAll('%s'));
+  for (var i = 0; i < cards.length; i++) {
+    var r = cards[i].getAttribute('data-review-id') || '';
+    if (r === rid) {
+      return !!cards[i].querySelector("%s");
+    }
+  }
+  return false;
+})();"""
+                % (json.dumps(rid), SEL.REVIEW_CARD, SEL.REVIEW_CARD_FALLBACK, SEL.REVIEW_REPLY_BUTTON)
+            )
+        )
     except Exception:
         return False
+
+
+def _review_rid(review: dict) -> str:
+    """The data-review-id for a review dict ('' when the key is a fallback)."""
+    key = review.get("review_key") or ""
+    return "" if "|" in key else key
 
 
 # ---------------------------------------------------------------------------
@@ -576,22 +773,166 @@ def make_sb(profile_dir: str | None, headless: bool):
     return SB(**kwargs)
 
 
+def post_reply_to_review(
+    sb,
+    maps_url: str,
+    reply_text: str,
+    external_id: str = "",
+    reviewer_name: str = "",
+    review_text: str = "",
+    dry_run: bool = False,
+) -> dict:
+    """Post a reply to one review and VERIFY it on the page (the POST /reply
+    implementation). Returns {posted, verified, review, place_url, error}.
+
+    Matching: by externalId first (the worker's stable hash is NOT Google's
+    data-review-id, so matching falls back to reviewerName + text snippet).
+    Only when logged in as the owner is a Reply control present; logged-out
+    this honestly returns posted=False with "no Reply control".
+    """
+    final_url = open_business_reviews(sb, maps_url)
+    # Prefer matching by reviewer name + text snippet (the stable externalId
+    # is our own hash, not Google's data-review-id).
+    review = find_review(sb, author=reviewer_name, snippet=(review_text or "")[:120])
+    if not review:
+        return {
+            "posted": False,
+            "verified": False,
+            "place_url": final_url,
+            "error": "review not found on the page",
+            "reviewerName": reviewer_name,
+        }
+
+    log(f"matched review by {review['author']!r} ({review['rating']} stars)")
+    if review["has_owner_reply"]:
+        return {
+            "posted": False,
+            "verified": False,
+            "place_url": final_url,
+            "error": "review already has an owner reply",
+            "review": review,
+        }
+
+    if not reply_control_present(sb, review):
+        return {
+            "posted": False,
+            "verified": False,
+            "place_url": final_url,
+            "error": "no Reply control found -- are we logged in as the business owner?",
+            "review": review,
+        }
+
+    if dry_run:
+        log("DRY-RUN: Reply control exists, review found. NOT typing, NOT submitting.")
+        return {
+            "posted": False,
+            "verified": False,
+            "dry_run": True,
+            "place_url": final_url,
+            "review": review,
+            "would_post_reply": reply_text,
+            "note": "dry-run: nothing was typed or submitted",
+        }
+
+    # --- LIVE PATH (only runs when dry_run is False) ---
+    try:
+        if not _click_reply_button(sb, review):
+            raise RuntimeError("Reply button could not be clicked")
+        sb.sleep(1.5)
+        box_sel = None
+        for sel in [
+            "textarea[aria-label*='Reply']",
+            "textarea[aria-label*='Respond']",
+            "div[contenteditable='true']",
+            "textarea",
+        ]:
+            try:
+                if sb.find_elements(sel):
+                    box_sel = sel
+                    break
+            except Exception:
+                continue
+        if box_sel is None:
+            raise RuntimeError("reply text box did not appear")
+        sb.type(box_sel, reply_text)
+        sb.sleep(1)
+        posted = False
+        for sel in [
+            "//button[contains(., 'Post')]",
+            "//button[contains(., 'Submit')]",
+            "button[aria-label*='Post']",
+        ]:
+            try:
+                if sel.startswith("//"):
+                    sb.click_xpath(sel)
+                else:
+                    sb.click(sel)
+                posted = True
+                break
+            except Exception:
+                continue
+        if not posted:
+            raise RuntimeError("Post/Submit button could not be clicked")
+        log("reply submitted, reading it back to verify ...")
+        sb.sleep(3)
+        sb.refresh()
+        sb.sleep(3)
+        check = find_review(sb, author=reviewer_name, snippet=(review_text or "")[:120])
+        if not check:
+            # The refresh may have reset the panel to Overview; reopen
+            # the Reviews tab and look once more.
+            try:
+                sb.click("button[aria-label*='Reviews']")
+                sb.sleep(3)
+            except Exception:
+                pass
+            check = find_review(sb, author=reviewer_name, snippet=(review_text or "")[:120])
+        # Verified only when the reply text is visible under the review,
+        # or the review now shows an owner reply.
+        verified = bool(
+            check
+            and (
+                reply_text[:60] in (check["text"] or "")
+                or check["has_owner_reply"]
+            )
+        )
+        return {
+            "posted": verified,
+            "verified": verified,
+            "place_url": final_url,
+            "review": check or review,
+            "error": None if verified else "reply text not visible after posting",
+        }
+    except Exception as exc:
+        return {"posted": False, "verified": False, "place_url": final_url, "error": str(exc)}
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
-def cmd_list_reviews(args) -> int:
+def cmd_sync(args) -> int:
     # NOTE: SeleniumBase's SB context manager swallows exceptions raised
     # inside the `with` block (it records the failure and returns normally),
     # so the try/except MUST be inside the `with`, or a fatal error would
     # silently produce no JSON result.
     with make_sb(args.profile_dir, args.headless) as sb:
         try:
+            result = sync_reviews(sb, args.business_url)
+            emit({"ok": True, "action": "sync", **result})
+            return 0 if result["complete"] else 0
+        except Exception as exc:
+            log(f"fatal: {exc}")
+            emit({"ok": False, "action": "sync", "error": str(exc)})
+            return 1
+
+
+def cmd_list_reviews(args) -> int:
+    with make_sb(args.profile_dir, args.headless) as sb:
+        try:
             final_url = open_business_reviews(sb, args.business_url)
             reviews = extract_reviews(sb, max_reviews=args.max_reviews)
             if not reviews:
-                # Debug aid: capture what the page actually shows so the
-                # selectors can be fixed without guessing.
                 try:
                     shot = os.path.join(
                         os.path.dirname(os.path.abspath(__file__)),
@@ -620,156 +961,34 @@ def cmd_list_reviews(args) -> int:
 
 
 def cmd_post_reply(args) -> int:
-    # See cmd_list_reviews: the try/except must be INSIDE the `with SB()`
-    # block because SB swallows exceptions raised inside it.
     with make_sb(args.profile_dir, args.headless) as sb:
         try:
-            return _cmd_post_reply_inner(sb, args)
+            result = post_reply_to_review(
+                sb,
+                args.business_url,
+                args.reply_text,
+                reviewer_name=args.review_author,
+                review_text=args.review_snippet,
+                dry_run=args.dry_run,
+            )
+            emit({"ok": result.get("posted") or result.get("dry_run", False), "action": "post-reply", **result})
+            return 0 if (result.get("posted") or result.get("dry_run")) else 1
         except Exception as exc:
             log(f"fatal: {exc}")
             emit({"ok": False, "action": "post-reply", "error": str(exc)})
             return 1
 
 
-def _cmd_post_reply_inner(sb, args) -> int:
-    final_url = open_business_reviews(sb, args.business_url)
-    review = find_review(sb, author=args.review_author, snippet=args.review_snippet)
-    if not review:
-        emit(
-            {
-                "ok": False,
-                "action": "post-reply",
-                "place_url": final_url,
-                "error": "review not found on the page",
-                "review_author": args.review_author,
-                "review_snippet": args.review_snippet,
-            }
-        )
-        return 1
-
-    log(f"matched review by {review['author']!r} ({review['rating']} stars)")
-    if review["has_owner_reply"]:
-        emit(
-            {
-                "ok": False,
-                "action": "post-reply",
-                "place_url": final_url,
-                "error": "review already has an owner reply",
-                "review": review,
-            }
-        )
-        return 1
-
-    if not reply_control_present(sb, review):
-        emit(
-            {
-                "ok": False,
-                "action": "post-reply",
-                "place_url": final_url,
-                "error": "no Reply control found -- are we logged in as the business owner?",
-                "review": review,
-            }
-        )
-        return 1
-
-    if args.dry_run:
-        log("DRY-RUN: Reply control exists, review found. NOT typing, NOT submitting.")
-        emit(
-            {
-                "ok": True,
-                "action": "post-reply",
-                "dry_run": True,
-                "place_url": final_url,
-                "review": review,
-                "would_post_reply": args.reply_text,
-                "note": "dry-run: nothing was typed or submitted",
-            }
-        )
-        return 0
-
-    # --- LIVE PATH (only runs when --dry-run is NOT passed) ---
-    # NOTE: the task forbids live posting for now. This branch exists so
-    # the worker is complete for the approved live test later; it is
-    # never reached in dry-run mode.
-    #
-    # CDP Elements have no working .find_elements()/.send_keys(), so the
-    # card is targeted by data-review-id (JS click, sb.click fallback)
-    # and typing/posting use document-level sb.* methods.
-    try:
-        if not _click_reply_button(sb, review):
-            raise RuntimeError("Reply button could not be clicked")
-        sb.sleep(1.5)
-        box_sel = None
-        for sel in [
-            "textarea[aria-label*='Reply']",
-            "textarea[aria-label*='Respond']",
-            "div[contenteditable='true']",
-            "textarea",
-        ]:
-            try:
-                if sb.find_elements(sel):
-                    box_sel = sel
-                    break
-            except Exception:
-                continue
-        if box_sel is None:
-            raise RuntimeError("reply text box did not appear")
-        sb.type(box_sel, args.reply_text)
-        sb.sleep(1)
-        posted = False
-        for sel in [
-            "//button[contains(., 'Post')]",
-            "//button[contains(., 'Submit')]",
-            "button[aria-label*='Post']",
-        ]:
-            try:
-                if sel.startswith("//"):
-                    sb.click_xpath(sel)
-                else:
-                    sb.click(sel)
-                posted = True
-                break
-            except Exception:
-                continue
-        if not posted:
-            raise RuntimeError("Post/Submit button could not be clicked")
-        log("reply submitted, reading it back to verify ...")
-        sb.sleep(3)
-        sb.refresh()
-        sb.sleep(3)
-        check = find_review(sb, author=args.review_author, snippet=args.review_snippet)
-        if not check:
-            # The refresh may have reset the panel to Overview; reopen
-            # the Reviews tab and look once more.
-            try:
-                sb.click("button[aria-label*='Reviews']")
-                sb.sleep(3)
-            except Exception:
-                pass
-            check = find_review(sb, author=args.review_author, snippet=args.review_snippet)
-        verified = bool(
-            check and args.reply_text[:60] in (check["text"] or "")
-            or (check and check["has_owner_reply"])
-        )
-        emit(
-            {
-                "ok": verified,
-                "action": "post-reply",
-                "place_url": final_url,
-                "review": check or review,
-                "verified_on_page": verified,
-                "error": None if verified else "reply text not visible after posting",
-            }
-        )
-        return 0 if verified else 1
-    except Exception as exc:
-        emit({"ok": False, "action": "post-reply", "error": str(exc)})
-        return 1
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="ReviewMitra Google Maps worker")
     sub = p.add_subparsers(dest="command", required=True)
+
+    ps = sub.add_parser("sync", help="full sync: business info + all reviews")
+    ps.add_argument("--business-url", required=True)
+    ps.add_argument("--profile-dir", default=None)
+    ps.add_argument("--headless", action="store_true", default=True)
+    ps.add_argument("--no-headless", dest="headless", action="store_false")
+    ps.set_defaults(func=cmd_sync)
 
     pl = sub.add_parser("list-reviews", help="list reviews of the business")
     pl.add_argument("--business-url", required=True)
