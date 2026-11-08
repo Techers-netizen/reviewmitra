@@ -200,11 +200,14 @@ export async function syncGoogleReviewsFromApi(businessId: string) {
   // 1. Discover Accounts and Locations
   const discovery = await fetchGoogleAccountsAndLocations(accessToken);
   if (!discovery.success || discovery.locations.length === 0) {
-    // If no locations configured or API quota pending, log status
+    // Honest signal: no token/locations means the GBP route cannot fetch
+    // anything. Returning success:false lets the caller fall back to the
+    // Places/scraper path instead of reporting a silent "0 reviews synced".
     return {
-      success: true,
+      success: false,
       reviewsCount: 0,
-      note: discovery.error || "No active Google Business locations detected yet.",
+      error: discovery.error || "No active Google Business locations detected yet.",
+      note: "Google Business Profile is not connected or has no locations. Connect Google in the dashboard to sync reviews.",
       diagnostic: discovery,
     };
   }

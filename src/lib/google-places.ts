@@ -21,8 +21,13 @@ export async function extractPlaceQuery(input: string): Promise<{
 }> {
   let trimmed = input.trim();
 
-  // Follow short links like maps.app.goo.gl or g.page
-  if (trimmed.includes("goo.gl/") || trimmed.includes("maps.app.goo.gl") || trimmed.includes("g.page/")) {
+  // Follow short links like maps.app.goo.gl, share.google or g.page
+  if (
+    trimmed.includes("goo.gl/") ||
+    trimmed.includes("maps.app.goo.gl") ||
+    trimmed.includes("share.google/") ||
+    trimmed.includes("g.page/")
+  ) {
     try {
       const resp = await fetch(trimmed, {
         method: "GET",
@@ -161,15 +166,93 @@ export async function syncGooglePlacesReviews(
     }
 
     const { placeId, query, resolvedUrl } = await extractPlaceQuery(input || business.businessName);
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    // Only a dedicated Google Maps key works here. The Firebase web key
+    // (NEXT_PUBLIC_FIREBASE_API_KEY) is restricted to Firebase services and
+    // Google rejects it for Places (legacy: "not enabled for your project",
+    // New: API_KEY_SERVICE_BLOCKED), so do NOT fall back to it.
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
     let targetPlaceId = placeId || business.googlePlaceId || undefined;
     let placeName = business.businessName;
     let placeRating: number | undefined;
     const rawReviews: RawReviewPayload[] = [];
 
-    // 1. Try Google Places API (if API key has Places enabled)
+    // 1a. Try Google Places API (New) — the legacy API is disabled for this
+    // project, so the New API is the only working Places route. Returns at
+    // most 5 reviews per place (Google limit), newest first.
     if (apiKey) {
+      try {
+        if (!targetPlaceId && query) {
+          const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+              "X-Goog-FieldMask":
+                "places.id,places.displayName,places.rating,places.userRatingCount,places.formattedAddress",
+            },
+            body: JSON.stringify({ textQuery: query }),
+          });
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            const best = (searchData.places || [])[0];
+            if (best?.id) {
+              targetPlaceId = String(best.id).replace(/^places\//, "");
+              placeName = best.displayName?.text || placeName;
+              placeRating = best.rating;
+            }
+          } else {
+            console.warn(
+              "Places API (New) searchText rejected:",
+              searchRes.status,
+              (await searchRes.text()).slice(0, 200)
+            );
+          }
+        }
+
+        if (targetPlaceId) {
+          const detailsRes = await fetch(
+            `https://places.googleapis.com/v1/places/${targetPlaceId}`,
+            {
+              headers: {
+                "X-Goog-Api-Key": apiKey,
+                "X-Goog-FieldMask": "id,displayName,rating,userRatingCount,reviews",
+              },
+            }
+          );
+          if (detailsRes.ok) {
+            const detailsData = await detailsRes.json();
+            placeName = detailsData.displayName?.text || placeName;
+            placeRating = detailsData.rating || placeRating;
+            for (const r of detailsData.reviews || []) {
+              const epoch = r.publishTime ? Math.floor(new Date(r.publishTime).getTime() / 1000) : 0;
+              const cleanAuthor = (r.authorAttribution?.displayName || "user")
+                .replace(/\W+/g, "_")
+                .toLowerCase();
+              rawReviews.push({
+                externalId: `gpn_${targetPlaceId}_${epoch || cleanAuthor}`,
+                reviewerName: r.authorAttribution?.displayName || "Google Reviewer",
+                reviewerAvatarUrl: r.authorAttribution?.photoUri || undefined,
+                rating: Number(r.rating) || 5,
+                reviewText: r.text?.text || r.originalText?.text || "",
+                reviewTimestamp: r.publishTime ? new Date(r.publishTime) : new Date(),
+              });
+            }
+          } else {
+            console.warn(
+              "Places API (New) details rejected:",
+              detailsRes.status,
+              (await detailsRes.text()).slice(0, 200)
+            );
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Google Places API (New) call notice:", apiErr);
+      }
+    }
+
+    // 1b. Legacy Places API (kept for projects where it is still enabled).
+    if (apiKey && rawReviews.length === 0) {
       try {
         if (!targetPlaceId && query) {
           const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
@@ -223,6 +306,20 @@ export async function syncGooglePlacesReviews(
       if (scraped.placeName) placeName = scraped.placeName;
       if (scraped.rating && !placeRating) placeRating = scraped.rating;
       rawReviews.push(...scraped.reviews);
+    }
+
+    // Honest failure: never report "synced" when nothing was fetched and no
+    // place was even identified. Previously this returned success:true with 0
+    // reviews, so the dashboard showed "Inbox Synced" while fetching nothing.
+    // Also do NOT overwrite the stored listing URL in that case.
+    if (rawReviews.length === 0 && !targetPlaceId) {
+      return {
+        success: false,
+        reviewsCount: 0,
+        placeName,
+        error:
+          "Google returned no review data for this listing. The Maps page does not include reviews in its initial HTML (they load in the browser), and no Places API key is configured. Connect Google Business Profile in the dashboard, or set GOOGLE_MAPS_API_KEY with Places API (New) enabled.",
+      };
     }
 
     // Construct official 1-Tap Google Write-a-Review link for QR Booster
