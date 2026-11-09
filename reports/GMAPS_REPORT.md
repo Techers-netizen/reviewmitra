@@ -9,17 +9,18 @@ Mumbai 400029 — 3.9★, 942 Google reviews.
 **Repo branch:** `autotest/overnight` (draft PR #1 — do NOT merge; `main`
 untouched). **Preview:**
 https://reviewmitra-git-autotest-overnight-opensoz.vercel.app
-**Last updated:** 2026-11-09 (this build session).
+**Last updated:** 2026-11-09 (verification session — service re-tested,
+login flow tested, see "Login test" below).
 
 ## Proof criteria (Zahid's 6) — honest status
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | Business name auto-fetched (dashboard screenshot) | **PARTIAL — worker proven, dashboard not yet** | Worker `/sync` returns `name: "New Lucky Restaurant"` read from the page (5/5 runs). The dashboard display of it (via `POST /api/worker/sync` → `/dashboard/reviews`) is built but not yet exercised end-to-end — it needs the worker service reachable from Vercel (`WORKER_URL`/`WORKER_SECRET` not yet set there) and a signed-in session. |
-| 2 | Fetched review count vs count shown on Google | **FAIL (logged-out limit) — honest numbers** | Fetched **5** vs **942** shown = **0.5%** completeness, `complete: false`, on all 5 runs. Logged-out, Google shows only 5 reviews (no lazy-load on scroll, "See more reviews" does not expand). The full 942 needs the owner's logged-in Chrome profile. |
-| 3 | Re-sync makes 0 duplicates | **PASS (worker level)** | 5 separate `/sync` runs returned the **identical 5 externalIds** (`gmaps_eb808012b381`, `gmaps_fc609e5236d7`, `gmaps_2cba0597a3ce`, `gmaps_136fcffbb4a0`, `gmaps_cc378256b960`) — 0 new ids on re-sync. DB-level upsert uses the same ids via `ingestReviews` (`platformName + externalReviewId` unique key), but no DB write has been performed yet in this session, so the DB half is **unproven**. |
+| 1 | Business name auto-fetched (dashboard screenshot) | **PARTIAL — worker proven, dashboard not yet** | Worker `/sync` returns `name: "New Lucky Restaurant"` read from the page (7/7 runs in the build session, plus 2/2 runs in the 2026-11-09 verification session). The dashboard display of it (via `POST /api/worker/sync` → `/dashboard/reviews`) is built but not yet exercised end-to-end — `next build` passes and the route is listed; a live call returns 401 without a session (auth gate works), but the full worker → ingest → dashboard path is unproven (no signed-in session available from this VM, and the Neon DB is unreachable via Prisma from this VM). |
+| 2 | Fetched review count vs count shown on Google | **FAIL (logged-out limit) — honest numbers** | Fetched **5** vs **942** shown = **0.5%** completeness, `complete: false`, on all 7 build runs and both 2026-11-09 verification runs. Logged-out, Google shows only 5 reviews (no lazy-load on scroll, "See more reviews" does not expand). The full 942 needs the owner's logged-in Chrome profile. |
+| 3 | Re-sync makes 0 duplicates | **PASS (worker level)** | 7 separate `/sync` runs in the build session plus 2 in the 2026-11-09 verification session returned the **identical 5 externalIds** (`gmaps_eb808012b381`, `gmaps_fc609e5236d7`, `gmaps_2cba0597a3ce`, `gmaps_136fcffbb4a0`, `gmaps_cc378256b960`) — 0 new ids on re-sync. DB-level upsert uses the same ids via `ingestReviews` (`platformName + externalReviewId` unique key), but no DB write has been performed yet, so the DB half is **unproven**. |
 | 4 | Spot check: 5 random reviews match Google word for word | **PASS (worker level)** | The 5 fetched reviews are the real ones Google shows logged-out: Adrian Rodrigues 5★, Iram Shah 5★, D.J. 4★, Electrofix Services 2★, shubham sharma 4★ — same set verified in the browser on 2026-11-08. DB comparison not yet possible (0 reviews in DB). |
-| 5 | ONE real reply posted and visible on Google after reload | **FAIL — blocked on owner login + go-ahead** | `/reply` dry-run honestly reports `posted: false, error: "no Reply control found — are we logged in as the business owner?"` Logged-out pages have no Reply buttons. No reply has been typed or posted. Needs Zahid's one-time manual login + his go-ahead for the ONE live reply test. |
+| 5 | ONE real reply posted and visible on Google after reload | **FAIL — blocked on owner login + go-ahead** | `/reply` dry-run honestly reports `posted: false, error: "no Reply control found — are we logged in as the business owner?"` Logged-out pages have no Reply buttons. No reply has been typed or posted. Needs Zahid's one-time manual login + his go-ahead for the ONE live reply test. **Login correction (2026-11-09, tested):** Google asks for the **password first** on the password challenge page and offers **no "Try another way"** option, so the device prompt cannot be sent without the password. The "email only + tap Yes + number" plan does NOT work as assumed — the owner must type the password once (in a headed window he can see), then tap Yes + the number. The worker never types the password. |
 | 6 | grep proves no dummy/fallback review data remains | **PASS (data paths)** | `grep` over `src/lib`, `src/app/api`, `prisma`, `worker` finds no live fabrication — only comments documenting the removals and third-party venv code. See Step 0 list below. Deliberately kept: landing-page marketing demo/testimonial sections (`src/app/page.tsx`) — clearly labelled, write nothing to the DB. |
 
 **Overall: NOT PASSED.** Criteria 2 and 5 fail on the owner login, which
@@ -102,10 +103,17 @@ https://reviewmitra-5ntqtr3wl-opensoz.vercel.app
   `POST /reply`, `GET /health`. Auto-starts the local egress-proxy
   forwarder on this VM.
 - `worker/Dockerfile` + `worker/README.md` — local Docker now, VPS later;
-  one-time login flow: worker types the email only, owner taps Yes + the
-  number on their phone, session saved to the profile; worker never sees
-  or types the password.
+  one-time login flow: worker types the email only, owner types the
+  password once and then taps Yes + the number on their phone (password
+  comes first — see "Login test"), session saved to the profile; worker
+  never sees or types the password.
 - `worker/requirements.txt` — added `fastapi`, `uvicorn[standard]`.
+- `worker/login_once.py` — one-time owner login script (SeleniumBase
+  only). Types the **email only**, never a password; drives the sign-in
+  page via JS (IIFE-wrapped `execute_script`, `#identifierId` selector).
+  Tested 2026-11-09: proved Google asks for the **password first** and
+  offers no "Try another way" on the password challenge page, so the
+  device prompt cannot be sent without the password (see "Login test").
 - `src/lib/worker-http.ts` — Next.js client for `WORKER_URL` + secret,
   long timeouts (10 min sync / 5 min reply).
 - `src/app/api/worker/sync/route.ts` — `POST /api/worker/sync`
@@ -135,9 +143,11 @@ route.
 | /sync #5 | New Lucky Restaurant | 3.9 | 942 | 5 | 0.5% | null |
 | /sync #6 | New Lucky Restaurant | 3.9 | 942 | 5 | 0.5% | **/g/11cs5st1_w** |
 | /sync #7 | New Lucky Restaurant | 3.9 | 942 | 5 | 0.5% | /g/11cs5st1_w |
+| /sync #8 (verification, 2026-11-09) | New Lucky Restaurant | 3.9 | 942 | 5 | 0.5% | /g/11cs5st1_w |
+| /sync #9 (verification, 2026-11-09) | New Lucky Restaurant | 3.9 | 942 | 5 | 0.5% | /g/11cs5st1_w |
 
-- **Dedupe:** runs #3–#7 returned the identical 5 externalIds — **0 new
-  ids on re-sync**.
+- **Dedupe:** runs #3–#9 returned the identical 5 externalIds — **0 new
+  ids on re-sync** (7 build runs + 2 verification runs).
 - **Reviews fetched (all runs):** Adrian Rodrigues 5★ ("It's a decent
   restaurant, looks a bit aged…", 9 months ago), Iram Shah 5★ (4 months
   ago), D.J. 4★ (4 years ago), Electrofix Services 2★ (7 years ago),
@@ -146,9 +156,22 @@ route.
 - **/reply dry-run:** `posted: false, verified: false, error: "no Reply
   control found — are we logged in as the business owner?"` — matched
   Adrian Rodrigues 5★ (`has_reply_button: false`). Nothing typed or
-  submitted.
+  submitted. Re-confirmed in the 2026-11-09 verification session
+  (same error, same review).
 - **Auth check:** `/sync` without the secret → 401. Service refuses to
   start without `WORKER_SECRET`.
+- **Address now returned:** runs #8–#9 returned the full address
+  ("Kalina Kurla Road, Santacruz East, opposite Air India Staff Colony,
+  Mumbai, Maharashtra 400029, India") — the earlier "address null" gap
+  is resolved (the address is read from the place overview; the earlier
+  nulls were from the stale profile / pre-fix runs).
+- **Next.js wiring (2026-11-09 verification):** `next build` passes;
+  `/api/worker/sync` listed as a dynamic route. `POST /api/worker/sync`
+  without a session → **401 "Not signed in."** (auth gate works) and the
+  login page returns 200. The full end-to-end (worker → ingest → DB →
+  dashboard) is **unproven**: no signed-in session is available from
+  this VM, and the Neon DB is unreachable via Prisma from this VM
+  (known P1011 TLS issue) — so no DB write was attempted or faked.
 - **DB Review count:** 0 at the last verified check (2026-11-08 21:13
   IST). This session performed **no DB writes** (all worker tests were
   read-only against Google Maps; `POST /api/worker/sync` was never
@@ -185,22 +208,63 @@ route.
 5. **`selectors.py` shadows Python's stdlib `selectors`** (asyncio /
    subprocess import failed). Renamed to `gmaps_selectors.py`.
 
+## Login test (2026-11-09) — password-first, no "Try another way"
+
+**Script:** `worker/login_once.py` (new, SeleniumBase only, no cloud
+browser). It types the **email only** and never types a password. Tested
+2026-11-09 ~11:35–11:52 IST against the live Google sign-in page.
+
+**Result: the "email only + tap Yes + number" plan does NOT work as
+assumed.** The worker reached the sign-in page and set the email
+(`publicdocc@gmail.com`), but after Next, Google shows the **password
+challenge page** (`/v3/signin/challenge/pwd`) whose buttons are only
+`Next` and `Forgot password?` — there is **no "Try another way" option**
+on that page. So the device prompt cannot be sent without the password
+first. The worker stopped (exit code 2, "password page with no 'Try
+another way'") and **never typed a password**. No login was completed,
+no session was saved, no live reply was posted.
+
+**What this changes:** the one-time owner login needs the owner to type
+the **password once** (in a headed window he can see), and only then
+tap Yes + the number on his phone. The README's login description
+("worker types the email only, owner taps Yes + number") is incomplete
+and must be corrected when the login is retried — the password step
+comes first. The worker still never sees or types the password.
+
+**Fixes made to the login path while debugging it (all in
+`worker/login_once.py` / the worker setup):**
+1. **`local_proxy.py` forwarder must run.** Chrome cannot use the
+   authenticated egress proxy directly — it fails with
+   `ERR_TUNNEL_CONNECTION_FAILED`. The forwarder on 127.0.0.1:8899 adds
+   the `Proxy-Authorization` header; the worker must be started with
+   `REVIEWMITRA_LOCAL_PROXY=http://127.0.0.1:8899` (the FastAPI service
+   starts the forwarder automatically via `_ensure_local_proxy()`).
+2. **A stale `google-owner` profile blocked all page loads.** The profile
+   dir created by the first failed login attempts made every page load
+   fail (`chrome-error://chromewebdata/`) even with the proxy fixed; a
+   fresh profile dir fixed it immediately (verified: a fresh profile
+   loads `google.com` and the sign-in page fine).
+3. **Google's email field is `input#identifierId` of `type="text"`, not
+   `type="email"`.** A diagnostic dump of the live sign-in page showed
+   the email input is `type="text"`, id `identifierId`, name
+   `identifier`. The original `input[type="email"]` selector never
+   matched.
+4. **`execute_script` needs an IIFE wrapper.** SeleniumBase's
+   `execute_script` evaluates the script directly (CDP), so a top-level
+   `return` is a `SyntaxError: Illegal return statement`. All login JS
+   is wrapped as `(function(){ ... })()`.
+
 ## Known gaps (not hidden)
 
-- **Address is null** in every `/sync` response. The address button
-  selectors (`button[data-item-id='address']`, aria-label "Address:…")
-  are stale for the current Maps UI — a probe confirmed no such elements
-  exist (and no `div.Io6YTe`), though the address text IS on the page
-  ("Kalina Kurla Road, Santacruz East, opposite Air India Staff
-  Colony"). The page-title address fallback also found nothing (title
-  has no " · " address part). Name/rating/total/placeId are unaffected.
 - **DB-level dedupe unproven** (worker-level dedupe is proven; the
   `POST /api/worker/sync` → DB ingest path has not been exercised
   end-to-end yet — it needs the worker reachable from Vercel and a
-  signed-in session).
+  signed-in session; the Neon DB is also unreachable via Prisma from
+  this VM).
 - **Dashboard display of the synced business/reviews unproven** for the
   same reason (route built, `next build` passes, preview READY, but no
-  live call made yet).
+  live call made yet — the route returns 401 without a session, which is
+  correct, but the ingest half was never reached).
 - **The worker service is not yet deployed anywhere permanent.** It runs
   on this VM for testing only. For production use it needs a VPS (see
   `worker/Dockerfile` + README) and `WORKER_URL` / `WORKER_SECRET` set in
@@ -208,9 +272,14 @@ route.
 
 ## Blocked — needs Zahid (only he can do these)
 
-1. **One-time owner login** (manual, headed Chrome, his phone tap Yes +
-   number). Until the persistent Chrome profile exists, Google shows only
-   5 of 942 reviews and no Reply buttons — criteria 2 and 5 cannot pass.
+1. **One-time owner login** — **password-first (corrected 2026-11-09).**
+   The worker opens the sign-in page and types the email only, but
+   Google asks for the **password** before any phone tap, and there is no
+   "Try another way" option on that page. So the owner must type the
+   password once (in a headed window he can see) and then tap Yes + the
+   number on his phone. The worker never sees or types the password.
+   Until the persistent Chrome profile exists, Google shows only 5 of
+   942 reviews and no Reply buttons — criteria 2 and 5 cannot pass.
 2. **Go-ahead for the ONE live reply test** (criterion 5). Nothing will
    be posted without it.
 3. (Unrelated to this task, still open) Whether Islamic Caps Rampuri and
