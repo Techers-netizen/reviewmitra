@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           error:
-            "The Google Maps worker is not configured (WORKER_URL / WORKER_SECRET missing). Start the worker service first — see worker/README.md.",
+            "Worker not connected — the Google Maps worker service is not configured (WORKER_URL / WORKER_SECRET missing). Start the worker service first — see worker/README.md. No reviews were synced and no data was changed.",
         },
         { status: 503 }
       );

@@ -7,6 +7,8 @@ import { syncGooglePlacesReviews } from "@/lib/google-places";
 import { syncMetaReviewsFromApi } from "@/lib/meta-business";
 import { scrapeJustdialReviews } from "@/lib/justdial-scraper";
 import { ingestReviews } from "@/lib/sync-engine";
+import { isWorkerTransportEnabled } from "@/lib/worker-queue";
+import { isWorkerHttpConfigured } from "@/lib/worker-http";
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,22 +51,33 @@ export async function POST(req: NextRequest) {
       }
 
       if (conn.platformName === "google") {
-        const googleResult = await syncGoogleReviewsFromApi(business.id);
-        // If official GBP API has 0 quota or no token, automatically run Direct Google Maps Scraper
-        if (!googleResult.success || (googleResult.newIngested === 0 && !googleResult.totalFetched)) {
-          const fallbackQuery =
-            business.googlePlaceId ||
-            business.googleReviewUrl ||
-            conn.listingUrl ||
-            `${business.businessName} ${business.city || ""}`.trim();
-          const placesRes = await syncGooglePlacesReviews(business.id, fallbackQuery);
+        // Google Maps sync runs through the SeleniumBase worker only
+        // (GBP API quota is 0). When the worker service is not reachable,
+        // say so clearly instead of trying dead API paths or faking data.
+        if (isWorkerTransportEnabled() && !isWorkerHttpConfigured()) {
           syncSummary.google = {
-            success: placesRes.success,
-            newIngested: placesRes.reviewsCount,
-            note: "Synced via Direct Google Maps Engine",
+            success: false,
+            newIngested: 0,
+            note: "Worker not connected — the Google Maps worker service is not running (WORKER_URL / WORKER_SECRET missing). Start it — see worker/README.md. No reviews synced.",
           };
         } else {
-          syncSummary.google = googleResult;
+          const googleResult = await syncGoogleReviewsFromApi(business.id);
+          // If official GBP API has 0 quota or no token, automatically run Direct Google Maps Scraper
+          if (!googleResult.success || (googleResult.newIngested === 0 && !googleResult.totalFetched)) {
+            const fallbackQuery =
+              business.googlePlaceId ||
+              business.googleReviewUrl ||
+              conn.listingUrl ||
+              `${business.businessName} ${business.city || ""}`.trim();
+            const placesRes = await syncGooglePlacesReviews(business.id, fallbackQuery);
+            syncSummary.google = {
+              success: placesRes.success,
+              newIngested: placesRes.reviewsCount,
+              note: "Synced via Direct Google Maps Engine",
+            };
+          } else {
+            syncSummary.google = googleResult;
+          }
         }
       } else if (conn.platformName === "facebook") {
         const fbResult = await syncMetaReviewsFromApi(business.id);
